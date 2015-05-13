@@ -9,10 +9,6 @@ buildscript {
     }
 }
 
-repositories {
-    jcenter()
-}
-
 android {
     compileSdkVersion 20
     buildToolsVersion "20"
@@ -32,7 +28,8 @@ android {
     sourceSets {
         main {
             manifest.srcFile 'AndroidManifest.xml'
-            java.srcDirs         = ['../../lfapp/lfjava', '../java']
+            java.srcDirs         = ['../../lfapp/lfjava', 'src']
+            // java.excludes        = ['**/GPlusClient.java', '**/Advertising.java']
             resources.srcDirs    = []
             aidl.srcDirs         = []
             renderscript.srcDirs = []
@@ -48,4 +45,12 @@ android {
 
 dependencies {
     compile project(':BaseGameUtils')
+}
+
+allprojects {
+    gradle.projectsEvaluated {
+        tasks.withType(JavaCompile) {
+            options.compilerArgs << "-Xlint:unchecked" << "-Xlint:deprecation"
+        }
+    }
 }
