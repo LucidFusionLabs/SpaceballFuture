@@ -27,10 +27,10 @@ else(LFL_ANDROID)
 endif(LFL_ANDROID)
 
 lfl_project(spaceball)
-add_subdirectory(../lfapp ${CMAKE_CURRENT_BINARY_DIR}/${LFL_PROJECT}_lfapp_obj)
+add_subdirectory(../core/lfapp ${CMAKE_CURRENT_BINARY_DIR}/${LFL_PROJECT}_lfapp_obj)
 add_definitions(${LFAPP_DEF})
 include_directories(${LFAPP_INCLUDE})
 
 lfapp_add_target(spaceball spaceball.cpp)
 lfapp_add_target(spaceballserv spaceballserv.cpp)
-lfapp_post_build_start(spaceball Spaceball6006)
+lfapp_post_build_start(spaceball spaceball Spaceball6006)
