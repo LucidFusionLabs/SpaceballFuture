@@ -750,13 +750,13 @@ struct SpaceballServer : public GameServer {
 
         udp_transport = new GameUDPServer(port);
         udp_transport->game_network = Singleton<Game::UDPNetwork>::Get();
-        udp_transport->query = this;
+        udp_transport->handler = this;
         svc.push_back(udp_transport);
 
 #ifdef LFL_ANDROID
         gplus_transport = new GPlusServer();
         gplus_transport->game_network = Singleton<Game::GoogleMultiplayerNetwork>::Get();
-        gplus_transport->query = this;
+        gplus_transport->handler = this;
         svc.push_back(gplus_transport);
 #endif
     }

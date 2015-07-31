@@ -23,6 +23,7 @@
 #include "lfapp/css.h"
 #include "lfapp/flow.h"
 #include "lfapp/gui.h"
+#include "lfapp/browser.h"
 #include "lfapp/game.h"
 
 #include "spaceballserv.h"
@@ -309,7 +310,7 @@ struct TeamSelectGUI : public GUI {
     void Start() { ShellRun("local_server"); }
 
     void Draw(Shader *MyShader) {
-        glTimeResolutionShaderWindows(MyShader, Color(25, 60, 130, 120), box);
+        glShadertoyShaderWindows(MyShader, Color(25, 60, 130, 120), box);
         GUI::Draw();
         screen->gd->SetColor(Color::white);
         BoxOutline().Draw(team_buttons[home_team].GetHitBoxBox());
@@ -470,7 +471,7 @@ int Frame(Window *W, unsigned clicks, unsigned mic_samples, bool cam_sample, int
     if (map_transition > 0) {
         map_transition -= clicks;
         screen->gd->DrawMode(DrawMode::_2D);
-        glTimeResolutionShaderWindows(&warpershader, Color::black, screen->Box(), &framebuffer.tex);
+        glShadertoyShaderWindows(&warpershader, Color::black, screen->Box(), &framebuffer.tex);
 
     } else {
         screen->cam->Look();
@@ -625,7 +626,9 @@ extern "C" int main(int argc, const char *argv[]) {
     FLAGS_far_plane = 1000;
     FLAGS_soundasset_seconds = 1;
     FLAGS_scale_font_height = 320;
+    FLAGS_font_engine = "atlas";
     FLAGS_default_font = "Origicide.ttf";
+    FLAGS_default_font_flag = FLAGS_console_font_flag = 0;
     FLAGS_lfapp_audio = FLAGS_lfapp_video = FLAGS_lfapp_input = FLAGS_lfapp_network = 1;
     screen->caption = "Spaceball 6006";
     screen->multitouch_keyboard_x = .37;
@@ -681,7 +684,7 @@ extern "C" int main(int argc, const char *argv[]) {
     soundasset.Load();
     app->shell.soundassets = &soundasset;
 
-    caust.Load("%s%02d.%s", StrCat(app->assetdir, "caust"), "png", 32);
+    caust.Load("%s%02d.%s", "caust", "png", 32);
     scene.Add(new Entity("field", asset("field")));
     asset("field")->blendt = GraphicsDevice::SrcAlpha;
 
@@ -846,8 +849,8 @@ extern "C" int main(int argc, const char *argv[]) {
     binds->Add(Bind(Key::F4,         Bind::CB(bind(&GameClient::SetCamera,  server,          vector<string>(1, string("4"))))));
     binds->Add(Bind(Key::Return,     Bind::CB(bind(&Shell::grabmode,        &app->shell,     vector<string>()))));
     binds->Add(Bind('r',             Bind::CB(bind(&MySwitchPlayerCmd,                       vector<string>())))); 
-	binds->Add(Bind('t',             Bind::CB(bind([&](){ chat->Toggle(); }))));
-	binds->Add(Bind(Key::Escape,     Bind::CB(bind([&](){ menubar->ToggleActive(); }))));
+	  binds->Add(Bind('t',             Bind::CB(bind([&](){ chat->Toggle(); }))));
+  	binds->Add(Bind(Key::Escape,     Bind::CB(bind([&](){ menubar->ToggleActive(); }))));
     binds->Add(Bind(Key::Backquote,  Bind::CB(bind(&GUI::ToggleConsole,     menubar))));
     binds->Add(Bind(Key::Quote,      Bind::CB(bind(&GUI::ToggleConsole,     menubar))));
 
