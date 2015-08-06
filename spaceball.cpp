@@ -450,6 +450,8 @@ void MyFieldColorCmd(const vector<string> &arg) {
 
 // LFL::Application FrameCB
 int Frame(Window *W, unsigned clicks, unsigned mic_samples, bool cam_sample, int flag) {
+    screen->binds->Repeat(clicks);
+
     if (Singleton<FlagMap>::Get()->dirty) {
         Singleton<FlagMap>::Get()->dirty = false;
         SettingsFile::Write(save_settings, LFAppDownloadDir(), "settings");
@@ -628,7 +630,7 @@ extern "C" int main(int argc, const char *argv[]) {
     FLAGS_scale_font_height = 320;
     FLAGS_font_engine = "atlas";
     FLAGS_default_font = "Origicide.ttf";
-    FLAGS_default_font_flag = FLAGS_console_font_flag = 0;
+    FLAGS_default_font_flag = FLAGS_lfapp_console_font_flag = 0;
     FLAGS_lfapp_audio = FLAGS_lfapp_video = FLAGS_lfapp_input = FLAGS_lfapp_network = 1;
     screen->caption = "Spaceball 6006";
     screen->multitouch_keyboard_x = .37;
@@ -849,10 +851,10 @@ extern "C" int main(int argc, const char *argv[]) {
     binds->Add(Bind(Key::F4,         Bind::CB(bind(&GameClient::SetCamera,  server,          vector<string>(1, string("4"))))));
     binds->Add(Bind(Key::Return,     Bind::CB(bind(&Shell::grabmode,        &app->shell,     vector<string>()))));
     binds->Add(Bind('r',             Bind::CB(bind(&MySwitchPlayerCmd,                       vector<string>())))); 
-	  binds->Add(Bind('t',             Bind::CB(bind([&](){ chat->Toggle(); }))));
-  	binds->Add(Bind(Key::Escape,     Bind::CB(bind([&](){ menubar->ToggleActive(); }))));
-    binds->Add(Bind(Key::Backquote,  Bind::CB(bind(&GUI::ToggleConsole,     menubar))));
-    binds->Add(Bind(Key::Quote,      Bind::CB(bind(&GUI::ToggleConsole,     menubar))));
+	  binds->Add(Bind('t',             Bind::CB(bind([=](){ chat->Toggle(); }))));
+  	binds->Add(Bind(Key::Escape,     Bind::CB(bind([=](){ menubar->ToggleActive(); }))));
+    binds->Add(Bind(Key::Backquote,  Bind::CB(bind([=](){ if (!menubar->active) app->shell.console(vector<string>()); }))));
+    binds->Add(Bind(Key::Quote,      Bind::CB(bind([=](){ if (!menubar->active) app->shell.console(vector<string>()); }))));
 
     // start our engine
     return app->Main();
