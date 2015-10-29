@@ -79,7 +79,7 @@ vector<v3> fireworks_positions;
 #define MyShip SpaceballGame::Ship
 #define MyBall SpaceballGame::Ball
 
-int Frame(Window *W, unsigned clicks, unsigned mic_samples, bool cam_sample, int flag);
+int Frame(Window *W, unsigned clicks, int flag);
 
 Geometry *FieldGeometry(const Color &rg, const Color &bg, const Color &fc) {
     vector<v3> verts, norm; vector<v2> tex; vector<Color> col; int ci=0;
@@ -342,8 +342,8 @@ void MyLocalServerDisable() {
 #ifdef LFL_BUILTIN_SERVER
     if (builtin_server_enabled) {
         builtin_server_enabled = false;
-        app->network.Shutdown(builtin_server->svc);
-        app->network.Disable(builtin_server->svc);
+        app->network->Shutdown(builtin_server->svc);
+        app->network->Disable(builtin_server->svc);
     }
 #endif
 }
@@ -372,7 +372,7 @@ void MyLocalServerEnable(int game_type) {
 
     if (!builtin_server_enabled) {
         builtin_server_enabled = true;
-        app->network.Enable(builtin_server->svc);
+        app->network->Enable(builtin_server->svc);
     }
 
     SpaceballGame *world = builtin_server->World();
@@ -449,7 +449,7 @@ void MyFieldColorCmd(const vector<string> &arg) {
 }
 
 // LFL::Application FrameCB
-int Frame(Window *W, unsigned clicks, unsigned mic_samples, bool cam_sample, int flag) {
+int Frame(Window *W, unsigned clicks, int flag) {
     screen->binds->Repeat(clicks);
 
     if (Singleton<FlagMap>::Get()->dirty) {
@@ -601,6 +601,7 @@ int Frame(Window *W, unsigned clicks, unsigned mic_samples, bool cam_sample, int
         helper->Draw();
     }
 
+    screen->gd->EnableBlend();
     static Font *text = Fonts::Get(FLAGS_default_font, "", 8, Color::white);
     if (FLAGS_draw_fps)   text->Draw(StringPrintf("FPS = %.2f", FPS()),                    point(screen->width*.05, screen->height*.05));
     if (!menubar->active) text->Draw(intervalminutes(Now() - server->map_started),         point(screen->width*.93, screen->height*.97));

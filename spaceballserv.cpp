@@ -53,7 +53,7 @@ struct SpaceballStatusServer : public HTTPServer::Resource {
     }
 };
 
-int Frame(LFL::Window *W, unsigned clicks, unsigned mic_samples, bool cam_sample, int flag) { return server->Frame(); }
+int Frame(LFL::Window *W, unsigned clicks, int flag) { return server->Frame(); }
 
 int SpaceballServer(int argc, const char **argv) {
     FLAGS_target_fps = FLAGS_framerate;
@@ -67,14 +67,14 @@ int SpaceballServer(int argc, const char **argv) {
     Asset::Load(&assets);
 
     HTTPServer httpd(FLAGS_port, false);
-    if (app->network.Enable(&httpd)) return -1;
+    if (app->network->Enable(&httpd)) return -1;
     httpd.AddURL("/favicon.ico", new HTTPServer::FileResource("./assets/icon.ico", "image/x-icon"));
     httpd.AddURL("/", new SpaceballStatusServer());
 
     // server = new SpaceballServer(FLAGS_name, FLAGS_port, FLAGS_framerate, &assets);
     if (!FLAGS_rconpw.empty()) server->rcon_auth_passwd = FLAGS_rconpw;
     if (!FLAGS_master.empty()) server->master_sink_url = FLAGS_master;
-    if (app->network.Enable(server->udp_transport)) return -1;
+    if (app->network->Enable(server->udp_transport)) return -1;
 
     INFO("Spaceball 6006 server initialized");
     return app->Main();
