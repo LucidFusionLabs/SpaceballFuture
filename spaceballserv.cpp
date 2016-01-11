@@ -34,7 +34,7 @@ DEFINE_bool (run_server,false,                                 "Run server");
 #else
 DEFINE_bool (run_server,true,                                  "Run server");
 #endif                                                         
-                                                               
+
 DEFINE_int  (port,      27640,                                 "Port");
 DEFINE_int  (framerate, 10,                                    "Server framerate");
 DEFINE_string(name,     "My Spaceball Server",                 "Server name");
@@ -45,63 +45,63 @@ vector<Asset> assets;
 SpaceballServer *server;
 
 struct SpaceballStatusServer : public HTTPServer::Resource {
-    char response[128];
-    HTTPServer::Response Request(Connection *, int method, const char *url, const char *args, const char *headers, const char *postdata, int postlen) {
-        char time[32]; httptime(time, sizeof(time));
-        snprintf(response, sizeof(response), "<html><h1>Spaceball Server %s</h1></html>\r\n", time);
-        return HTTPServer::Response("text/html; charset=UTF-8", response);
-    }
+  char response[128];
+  HTTPServer::Response Request(Connection *, int method, const char *url, const char *args, const char *headers, const char *postdata, int postlen) {
+    char time[32]; httptime(time, sizeof(time));
+    snprintf(response, sizeof(response), "<html><h1>Spaceball Server %s</h1></html>\r\n", time);
+    return HTTPServer::Response("text/html; charset=UTF-8", response);
+  }
 };
 
 int Frame(LFL::Window *W, unsigned clicks, int flag) { return server->Frame(); }
 
 int SpaceballServer(int argc, const char **argv) {
-    FLAGS_target_fps = FLAGS_framerate;
-    screen->frame_cb = Frame;
+  FLAGS_target_fps = FLAGS_framerate;
+  screen->frame_cb = Frame;
 
-    // assets.push_back(Asset(name,      texture, scale, trans, rotate, geometry  hull, cubemap, texgen));
-    assets.push_back(Asset("ship",       "",      0,     0,     0,      0,        0,    0,       0     ));
-    assets.push_back(Asset("shipred",    "",      0,     0,     0,      0,        0,    0,       0     ));
-    assets.push_back(Asset("shipblue",   "",      0,     0,     0,      0,        0,    0,       0     ));
-    assets.push_back(Asset("ball",       "",      0,     0,     0,      0,        0,    0,       0     ));
-    Asset::Load(&assets);
+  // assets.push_back(Asset(name,      texture, scale, trans, rotate, geometry  hull, cubemap, texgen));
+  assets.push_back(Asset("ship",       "",      0,     0,     0,      0,        0,    0,       0     ));
+  assets.push_back(Asset("shipred",    "",      0,     0,     0,      0,        0,    0,       0     ));
+  assets.push_back(Asset("shipblue",   "",      0,     0,     0,      0,        0,    0,       0     ));
+  assets.push_back(Asset("ball",       "",      0,     0,     0,      0,        0,    0,       0     ));
+  Asset::Load(&assets);
 
-    HTTPServer httpd(FLAGS_port, false);
-    if (app->network->Enable(&httpd)) return -1;
-    httpd.AddURL("/favicon.ico", new HTTPServer::FileResource("./assets/icon.ico", "image/x-icon"));
-    httpd.AddURL("/", new SpaceballStatusServer());
+  HTTPServer httpd(FLAGS_port, false);
+  if (app->network->Enable(&httpd)) return -1;
+  httpd.AddURL("/favicon.ico", new HTTPServer::FileResource("./assets/icon.ico", "image/x-icon"));
+  httpd.AddURL("/", new SpaceballStatusServer());
 
-    // server = new SpaceballServer(FLAGS_name, FLAGS_port, FLAGS_framerate, &assets);
-    if (!FLAGS_rconpw.empty()) server->rcon_auth_passwd = FLAGS_rconpw;
-    if (!FLAGS_master.empty()) server->master_sink_url = FLAGS_master;
-    if (app->network->Enable(server->udp_transport)) return -1;
+  // server = new SpaceballServer(FLAGS_name, FLAGS_port, FLAGS_framerate, &assets);
+  if (!FLAGS_rconpw.empty()) server->rcon_auth_passwd = FLAGS_rconpw;
+  if (!FLAGS_master.empty()) server->master_sink_url = FLAGS_master;
+  if (app->network->Enable(server->udp_transport)) return -1;
 
-    INFO("Spaceball 6006 server initialized");
-    return app->Main();
+  INFO("Spaceball 6006 server initialized");
+  return app->Main();
 }
 
 }; // namespace LFL;
 using namespace LFL;
 
 extern "C" int main(int argc, const char **argv) {
-    static const char *service_name = "Spaceball 6006 Server";
-    app->logfilename = StrCat(LFAppDownloadDir(), "spaceballserv.txt");
-    FLAGS_lfapp_camera = FLAGS_lfapp_audio = FLAGS_lfapp_video = FLAGS_lfapp_input = 0;
+  static const char *service_name = "Spaceball 6006 Server";
+  app->logfilename = StrCat(LFAppDownloadDir(), "spaceballserv.txt");
+  FLAGS_lfapp_camera = FLAGS_lfapp_audio = FLAGS_lfapp_video = FLAGS_lfapp_input = 0;
 
 #ifdef _WIN32
-    if (argc>1) open_console = 1;
+  if (argc>1) open_console = 1;
 #endif
 
-    if (app->Create(argc, argv, __FILE__)) { ERROR("lfapp init failed: ", strerror(errno)); return app->Free(); }
-    if (app->Init())                       { ERROR("lfapp open failed: ", strerror(errno)); return app->Free(); }
+  if (app->Create(argc, argv, __FILE__)) { ERROR("lfapp init failed: ", strerror(errno)); return app->Free(); }
+  if (app->Init())                       { ERROR("lfapp open failed: ", strerror(errno)); return app->Free(); }
 
-    bool exit=0;
+  bool exit=0;
 #ifdef _WIN32
-    if (install) { NTService::Install(service_name, argv[0]); exit=1; }
-    if (uninstall) { NTService::Uninstall(service_name); exit=1; }
+  if (install) { NTService::Install(service_name, argv[0]); exit=1; }
+  if (uninstall) { NTService::Uninstall(service_name); exit=1; }
 #endif
-    if (FLAGS_run_server) { return ::SpaceballServer(argc, argv); }
-    if (exit) return app->Free();
+  if (FLAGS_run_server) { return ::SpaceballServer(argc, argv); }
+  if (exit) return app->Free();
 
-    return NTService::WrapMain(service_name, ::SpaceballServer, argc, argv);
+  return NTService::WrapMain(service_name, ::SpaceballServer, argc, argv);
 }
