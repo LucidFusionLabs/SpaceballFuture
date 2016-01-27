@@ -232,7 +232,7 @@ struct SpaceballGame : public Game {
   void Reset() { last_scored=Time(0); red_score=blue_score=0; started=ranlast=Now(); state=State::GAME_ON; ResetWorld(); }
   void RandomTeams() { home = SpaceballTeam::GetRandom(); away = SpaceballTeam::GetRandom(home); }
   void AssignShipColor(Ship *ship, SpaceballTeam *team) {
-    const Scene::EntityVector &other_ships = scene->assetMap[ship->asset->name];
+    const Scene::EntityVector &other_ships = scene->asset[ship->asset->name];
     vector<Color> other_ship_colors, remaining_colors;
     for (Scene::EntityVector::const_iterator i = other_ships.begin(); i != other_ships.end(); ++i) other_ship_colors.push_back(((Ship*)*i)->color1);
     sort(other_ship_colors.begin(), other_ship_colors.end());
@@ -245,10 +245,9 @@ struct SpaceballGame : public Game {
   string MapRcon() { return StrCat("map ", home->name, " ", away->name, " ", Now()-started, "\n"); }
   bool JoinRcon(ConnectionData *cd, Entity *e, string *out) { 
     StrAppend(out, MapRcon(), "set_entity");
-    for (Scene::EntityAssetMap::iterator i = scene->assetMap.begin(); i != scene->assetMap.end(); i++) {
-      if (!SpaceballGame::IsShipAssetName((*i).first)) continue;
-      for (Scene::EntityVector::iterator j = (*i).second.begin(); j != (*i).second.end(); j++)
-        StrAppend(out, " ", (*j)->name, ".color1=", (*j)->color1.HexString());
+    for (auto const &a : scene->asset) {
+      if (!SpaceballGame::IsShipAssetName(a.first)) continue;
+      for (auto e : a.second) StrAppend(out, " ", e->name, ".color1=", e->color1.HexString());
     }
     *out += "\n";
     return Game::JoinRcon(cd, e, out);
@@ -309,16 +308,16 @@ struct SpaceballGame : public Game {
   void ResetWorld(int goal=0, int points=0, bool reset_balls=true) {
     red_startindex  = rand() % PlayersPerTeam;
     blue_startindex = rand() % PlayersPerTeam;
-    for (Scene::EntityAssetMap::iterator i = scene->assetMap.begin(); i != scene->assetMap.end(); i++) {
-      bool ball = reset_balls && i->first == "ball";
-      if (!ball && i->first != "shipred" && i->first != "shipblue") continue;
-      for (Scene::EntityVector::iterator j = (*i).second.begin(); j != (*i).second.end(); j++) {
-        if (ball) { ResetBall(*j, goal); continue; }
-        Game::ConnectionData *cd = (Game::ConnectionData*)(*j)->userdata;
+    for (auto const &a : scene->asset) {
+      bool ball = reset_balls && a.first == "ball";
+      if (!ball && a.first != "shipred" && a.first != "shipblue") continue;
+      for (auto e : a.second) {
+        if (ball) { ResetBall(e, goal); continue; }
+        Game::ConnectionData *cd = (Game::ConnectionData*)e->userdata;
         if (cd->team == goal) cd->score += points;
-        (*j)->ort = StartOrientation(cd->team);
-        (*j)->pos = StartPosition(cd->team, &red_startindex, &blue_startindex);
-        physics->SetPosition(*j, (*j)->pos, (*j)->ort);
+        e->ort = StartOrientation(cd->team);
+        e->pos = StartPosition(cd->team, &red_startindex, &blue_startindex);
+        physics->SetPosition(e, e->pos, e->ort);
       }
     }
   }
@@ -343,12 +342,10 @@ struct SpaceballGame : public Game {
     }
 
     int goal = 0;
-    Entity *e = 0;
-    for (Scene::EntityAssetMap::iterator i = scene->assetMap.begin(); i != scene->assetMap.end() && !goal; i++)
-      for (Scene::EntityVector::iterator j = (*i).second.begin(); j != (*i).second.end() && !goal; j++) {
-        e = (*j);
-
-        if (SpaceballGame::IsShipAssetName(i->first)) {
+    Ball *ball = 0;
+    for (auto const &a : scene->asset)
+      for (auto e : a.second) {
+        if (SpaceballGame::IsShipAssetName(a.first)) {
           Ship *ship = (Ship*)e;
           Game::Controller but(e->buttons);
 
@@ -367,10 +364,11 @@ struct SpaceballGame : public Game {
           if (ship->Ysnapped)
             e->vel.y = ship->Ysnapped - e->pos.y;
 
-          if (IsSpectatorAssetName(i->first)) SimplePhysics::Update(e, timestep);
+          if (IsSpectatorAssetName(a.first)) SimplePhysics::Update(e, timestep);
           else physics->Input(e, timestep, true);
         }
-        else if ((*i).first == "ball") {
+        else if (a.first == "ball") {
+          ball = (Ball*)e;
           for (int k=0; k<planes.size(); k++) {
             float distance = planes[k].Distance(e->pos);
             if (distance > 0) continue;
@@ -395,7 +393,6 @@ struct SpaceballGame : public Game {
 
     if (goal) {
       string scoredby;
-      Ball *ball = (Ball*)e;
       bool red = goal == Team::Home;
       EntityID scorer_id = red ? ball->last_collided_with_red : ball->last_collided_with_blue;
       Entity *scorer = Get(scorer_id);
@@ -421,11 +418,9 @@ struct SpaceballGame : public Game {
     physics->Update(timestep);
     physics->Collided(false, bind(&SpaceballGame::CollidedCB, this, _1, _2, _3, _4));
 
-    for (Scene::EntityAssetMap::iterator i = scene->assetMap.begin(); i != scene->assetMap.end(); i++) 
-      for (Scene::EntityVector::iterator j = (*i).second.begin(); j != (*i).second.end(); j++) {
-        Entity *e = (*j);
+    for (auto const &a : scene->asset)
+      for (auto e : a.second)
         physics->Output(e, timestep);
-      }
 
     Time game_length = Now() - started;
     if (state == State::GAME_ON &&
@@ -596,30 +591,29 @@ struct SpaceballBots : public GameBots {
 
     // find the ships & ball
     Entity *ball=0;
-    for (Scene::EntityAssetMap::iterator i = scene->assetMap.begin(); i != scene->assetMap.end(); i++) {
-      for (Scene::EntityVector::iterator j = (*i).second.begin(); j != (*i).second.end(); j++) {
-        if (i->first == "ball") { ball = *j; continue; }
+    for (auto const &a : scene->asset) {
+      for (auto e : a.second) {
+        if (a.first == "ball") { ball = e; continue; }
 
-        bool red = i->first == "shipred", blue = i->first == "shipblue";
+        bool red = a.first == "shipred", blue = a.first == "shipblue";
         if (!red && !blue) continue;
 
         Team *team = red ? &redteam : &blueteam, *opponent = red ? &blueteam : &redteam;
-        team->players.push_back(Player(*j, (Game::ConnectionData*)(*j)->userdata,
-                                       v3::Dist2((*j)->pos, team->goal_center),
-                                       v3::Dist2((*j)->pos, opponent->goal_center)));
+        team->players.push_back(Player(e, (Game::ConnectionData*)e->userdata,
+                                       v3::Dist2(e->pos, team->goal_center),
+                                       v3::Dist2(e->pos, opponent->goal_center)));
       }
     }
     if (!ball) return;
     bool ball_on_red_side = fd->RedSide(ball->pos);
 
     // find who is closest
-    for (Scene::EntityAssetMap::iterator i = scene->assetMap.begin(); i != scene->assetMap.end(); i++) {
-      bool red = i->first == "shipred", blue = i->first == "shipblue";
+    for (auto const &a : scene->asset) {
+      bool red = a.first == "shipred", blue = a.first == "shipblue";
       if (!red && !blue) continue;
 
       Team *team = red ? &redteam : &blueteam;
-      for (Scene::EntityVector::iterator j = (*i).second.begin(); j != (*i).second.end(); j++) {                
-        Entity *e = *j;
+      for (auto e : a.second) {
         float dist2 = v3::Dist2(ball->pos, e->pos);
         if (dist2 < team->closest_player_distance_to_ball) {
           team->closest_player_distance_to_ball = dist2;
@@ -650,20 +644,19 @@ struct SpaceballBots : public GameBots {
     int assignment_index = 0;
 
     // generalize & respond
-    for (BotVector::iterator i = bots.begin(); i != bots.end(); i++) {
-      Bot *b = &(*i);
-      bool red = i->entity->asset->name == string("shipred");
+    for (auto &b : bots) {
+      bool red = b.entity->asset->name == string("shipred");
       Team *team = red ? &redteam : &blueteam, *opponent = red ? &blueteam : &redteam;
-      bool nearest = i->entity == team->closest_player_to_ball;
+      bool nearest = b.entity == team->closest_player_to_ball;
       bool my_ball = nearest && team->possession, fire = false;
-      bool can_shoot = my_ball && now - i->last_shot > Seconds(1);
+      bool can_shoot = my_ball && now - b.last_shot > Seconds(1);
       Game::Controller buttons;
 
       // receive instructions
       Entity *cover = 0;
       int role = Role::LD;
-      while (assignment_index < assignments.size() && assignments[assignment_index].player_data->entityID < i->player_data->entityID) assignment_index++;
-      if (assignment_index < assignments.size() && assignments[assignment_index].player_data->entityID == i->player_data->entityID) {
+      while (assignment_index < assignments.size() && assignments[assignment_index].player_data->entityID < b.player_data->entityID) assignment_index++;
+      if (assignment_index < assignments.size() && assignments[assignment_index].player_data->entityID == b.player_data->entityID) {
         role = assignments[assignment_index].role;
         cover = assignments[assignment_index++].cover;
       }
@@ -671,37 +664,37 @@ struct SpaceballBots : public GameBots {
 
       /* Swarm AI: A Solution to Soccer (Kutsenok) http://www.dreamspike.com/kutsenok/attachments/File/SwarmAISoccerThesis04-_Kutsenok.pdf */
       if (my_ball) {
-        float goaldist = v3::Dist2(opponent->goal_center, i->entity->pos); 
+        float goaldist = v3::Dist2(opponent->goal_center, b.entity->pos); 
         float space = opponent->closest_player_distance_to_ball;
 
-        if (can_shoot && goaldist < AlwaysShootDistance() && (fire = Shoot(b, ball, opponent->goal_center, &buttons))) { /**/ }
+        if (can_shoot && goaldist < AlwaysShootDistance() && (fire = Shoot(&b, ball, opponent->goal_center, &buttons))) { /**/ }
         else if (space < PossessionThreatenedDistance()) {
-          if ((fire = Pass(b, ball, &buttons))) { /**/ }
-          else if (space < PossessionDesperationDistance() && (fire = Shoot(b, ball, opponent->goal_center, &buttons))) { /**/ }
-          else EscapePursuit(b, ball, opponent->closest_player_to_ball, &buttons);
+          if ((fire = Pass(&b, ball, &buttons))) { /**/ }
+          else if (space < PossessionDesperationDistance() && (fire = Shoot(&b, ball, opponent->goal_center, &buttons))) { /**/ }
+          else EscapePursuit(&b, ball, opponent->closest_player_to_ball, &buttons);
         }
-        else if ((fire = PassPainting(b, ball, &buttons))) { /**/ }
+        else if ((fire = PassPainting(&b, ball, &buttons))) { /**/ }
         else {
           v3 dribble_target = opponent->goal_center;
-          float vertical_third = SpaceballGame::FieldDefinition::get()->VerticalThird(i->entity->pos);
+          float vertical_third = SpaceballGame::FieldDefinition::get()->VerticalThird(b.entity->pos);
           if (vertical_third < 2 || vertical_third >= 3) dribble_target += v3(Rand(0.3, 0.6), 0, 0) * (vertical_third - 1.5);
-          Dribble(b, ball, dribble_target, &buttons);
+          Dribble(&b, ball, dribble_target, &buttons);
         }
       } else {
-        if (nearest) Intercept(b, ball, &buttons);
+        if (nearest) Intercept(&b, ball, &buttons);
         else if (team->possession ||
                  (defender && (!cover || (cover && red != fd->RedSide(cover->pos)))))
         {
-          RubberBandMovement(b, Role::StartPosition(role, red), Role::IsForward(role), &buttons);
+          RubberBandMovement(&b, Role::StartPosition(role, red), Role::IsForward(role), &buttons);
         }
         else {
-          fire = Cover(b, ball, cover, &buttons);
+          fire = Cover(&b, ball, cover, &buttons);
         }
       }
 
-      if (fire) i->last_shot = Now();
+      if (fire) b.last_shot = Now();
       else SpaceballGame::Ship::set_boost(&buttons); // release = fire
-      i->entity->buttons = buttons.buttons;
+      b.entity->buttons = buttons.buttons;
     }
   }
   void Intercept(Bot *b, Entity *ball, Game::Controller *buttons) {

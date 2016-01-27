@@ -240,7 +240,7 @@ struct SpaceballClient : public GameClient {
   }
   void AnimationChange(Entity *e, int NewID, int NewSeq) {
     static SoundAsset *bounce = soundasset("bounce");
-    if      (NewID == SpaceballGame::AnimShipBoost) SystemAudio::PlaySoundEffect(bounce);
+    if      (NewID == SpaceballGame::AnimShipBoost) app->PlaySoundEffect(bounce);
     else if (NewID == SpaceballGame::AnimExplode)   e->animation.Start(&explodeshader);
   }
   void RconRequestCB(const string &cmd, const string &arg, int seq) { 
@@ -800,7 +800,7 @@ extern "C" int main(int argc, const char *argv[]) {
   credits->push_back(Game::Credit("Image format", "Libpng",       "http://www.libpng.org/",          ""));
 
   // start music
-  SystemAudio::PlayBackgroundMusic(soundasset("music"));
+  app->PlayBackgroundMusic(soundasset("music"));
 
   if (FLAGS_multitouch) {
     touchcontrols = new GameMultiTouchControls(server);
