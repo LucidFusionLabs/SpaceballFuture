@@ -41,9 +41,11 @@ GamePlayerListGUI *playerlist;
 GameMultiTouchControls *touchcontrols;
 vector<string> save_settings;
 unsigned fb_tex1, fb_tex2;
-int map_transition;
+int map_transition, map_transition_start;
+bool draw_skybox_only;
 FrameBuffer framebuffer;
-Shader fadershader, warpershader, explodeshader;
+Shader fadershader, warpshader, explodeshader;
+Color home_goal_color, away_goal_color;
 HelperGUI *helper;
 
 DEFINE_bool  (draw_fps,      true,                                  "Draw FPS");
@@ -82,10 +84,13 @@ vector<v3> fireworks_positions;
 int Frame(Window *W, unsigned clicks, int flag);
 
 Geometry *FieldGeometry(const Color &rg, const Color &bg, const Color &fc) {
-  vector<v3> verts, norm; vector<v2> tex; vector<Color> col; int ci=0;
+  vector<v3> verts, norm;
+  vector<v2> tex;
+  vector<Color> col;
   SpaceballGame::FieldDefinition *fd = SpaceballGame::FieldDefinition::get();
   v3 goals = SpaceballGame::Goals::get(), up=v3(0,1,0), fwd=v3(0,0,1), rev(0,0,-1);
   float tx=10, ty=10;
+  int ci=0;
 
   /* field */
   verts.push_back(fd->B); norm.push_back(up); tex.push_back(v2(0,  0));  col.push_back(fc.a(10 + ci++ * 6.0/255));
@@ -137,11 +142,24 @@ void SpaceballMap::Load(const string &home_name, const string &away_name) {
   if (!home || !away) { ERROR("unknown team: ", home_name, " or ", away_name); return; }
   skybox.Load(home->skybox_name);
 
+  home_goal_color = home->goal_color;
+  away_goal_color = away->goal_color;
   asset("shipred" )->col = home->ship_color.diffuse;
   asset("shipblue")->col = away->ship_color.diffuse;
 
+  float hh, hs, hv, ah, as, av;
+  home_goal_color.ToHSV(&hh, &hs, &hv);
+  away_goal_color.ToHSV(&ah, &as, &av);
+  float angle_dist = min(360 - fabs(hh - ah), fabs(hh - ah));
+  if (angle_dist < 60) {
+    bool reverse = ah < hh;
+    away_goal_color = Color::FromHSV(ah + (reverse ? -180 : 180), as, av);
+    away->ship_color.diffuse.ToHSV(&ah, &as, &av);
+    asset("shipblue")->col = Color::FromHSV(ah + (reverse ? -180 : 180), as, av);
+  }
+
   Asset *field = asset("field");
-  Replace<Geometry>(&field->geometry, FieldGeometry(home->goal_color, away->goal_color, home->field_color));
+  Replace<Geometry>(&field->geometry, FieldGeometry(home_goal_color, away_goal_color, home->field_color));
 
   screen->gd->EnableLight(0);
   screen->gd->Light(0, GraphicsDevice::Ambient,  home->light.color.ambient.x);
@@ -169,7 +187,7 @@ void ShipDraw(Asset *a, Entity *e) {
   static float last_lightning_offset = 0;
   static int lightning_texcoord_min_int_x = 0;
   static Font *lightning_font = Fonts::Get("lightning");
-  static Glyph *lightning_glyph = &lightning_font->glyph->table[2];
+  static Glyph *lightning_glyph = lightning_font->FindGlyph(2);
   static Geometry *lightning_obj = 0;
   if (!lightning_obj) {
     float lightning_glyph_texcoord[4];
@@ -276,13 +294,15 @@ struct SpaceballClient : public GameClient {
       vector<string> args;
       Split(arg, isspace, &args);
       if (args.size() != 3) { ERROR("map ", arg); return; }
+      draw_skybox_only = true;
       framebuffer.Attach(fb_tex1);
       screen->RenderToFrameBuffer(&framebuffer);
       sbmap->Load(args[0], args[1]);
       framebuffer.Attach(fb_tex2);
       screen->RenderToFrameBuffer(&framebuffer);
+      draw_skybox_only = false;
       map_started = Now() - Time(atoi(args[2]));
-      map_transition = Seconds(3).count();
+      map_transition = map_transition_start = Seconds(3).count();
     } else {
       ERROR("unknown rcon: ", cmd, " ", arg); return;
     }
@@ -291,22 +311,25 @@ struct SpaceballClient : public GameClient {
 
 struct TeamSelectGUI : public GUI {
   vector<SpaceballTeam> *teams;
-  Font *font, *team_font;
+  Font *font, *bright_font, *glow_font, *team_font;
   Widget::Button start_button;
   vector<Widget::Button> team_buttons;
   int home_team=0, away_team=0;
 
   TeamSelectGUI(Window *w) : GUI(w), teams(SpaceballTeam::GetList()),
-  font(Fonts::Get("Origicide.ttf", "", 8, Color::white)), team_font(Fonts::Get("sbmaps")),
-  start_button(this, 0, font, "start", MouseController::CB(bind(&TeamSelectGUI::Start, this))) {
-    start_button.outline = &font->fg;
+  font       (Fonts::Get(FLAGS_default_font,                 "", 8, Color::grey80)),
+  bright_font(Fonts::Get(FLAGS_default_font,                 "", 8, Color::white)),
+  glow_font  (Fonts::Get(StrCat(FLAGS_default_font, "Glow"), "", 8, Color::white)),
+  team_font  (Fonts::Get("sbmaps")),
+  start_button(this, 0, bright_font, "start", MouseController::CB(bind(&TeamSelectGUI::Start, this))) {
+    start_button.outline = &bright_font->fg;
     team_buttons.resize(teams->size());
     for (int i=0; i<team_buttons.size(); i++) team_buttons[i] =
       Widget::Button(this, team_font->FindGlyph((*teams)[i].font_index), font, (*teams)[i].name,
                      MouseController::CB(bind(&TeamSelectGUI::SetHomeTeamIndex, this, i)));
   }
 
-  void SetHomeTeamIndex(int n) { home_team = n; }
+  void SetHomeTeamIndex(int n) { home_team = n; child_box.Clear(); }
   void Start() { ShellRun("local_server"); }
 
   void Draw(Shader *MyShader) {
@@ -318,11 +341,12 @@ struct TeamSelectGUI : public GUI {
 
   void Layout() {
     box = screen->Box(.1, .1, .8, .8);
-    int bw=50, bh=50, sx=25, px=(box.w - (bw*4 + sx*3))/2;
+    int bw=box.w*2/13.0, bh=bw, sx=bw/2, px=(box.w - (bw*4 + sx*3))/2;
     Flow flow(&box, font, Reset());
     flow.AppendNewlines(1);
     flow.p.x += px;
     for (int i = 0; i < team_buttons.size(); i++) {
+      team_buttons[i].font = home_team == i ? glow_font : font;
       team_buttons[i].box = Box(bw, bh);
       team_buttons[i].Layout(&flow);
       flow.p.x += sx;
@@ -444,7 +468,7 @@ void MySwitchPlayerCmd(const vector<string> &) {
 void MyFieldColorCmd(const vector<string> &arg) {
   Color fc(arg.size() ? arg[0] : "");
   Asset *field = asset("field");
-  Replace<Geometry>(&field->geometry, FieldGeometry(sbmap->home->goal_color, sbmap->away->goal_color, fc));
+  Replace<Geometry>(&field->geometry, FieldGeometry(home_goal_color, away_goal_color, fc));
   INFO("field_color = ", fc.HexString());
 }
 
@@ -473,7 +497,9 @@ int Frame(Window *W, unsigned clicks, int flag) {
   if (map_transition > 0) {
     map_transition -= clicks;
     screen->gd->DrawMode(DrawMode::_2D);
-    glShadertoyShaderWindows(&warpershader, Color::black, screen->Box(), &framebuffer.tex);
+    FLAGS_shadertoy_blend = 1 - (float)map_transition / map_transition_start;
+    glShadertoyShaderWindows(&warpshader, Color::grey60, screen->Box(), &framebuffer.tex);
+    return 0;
 
   } else {
     screen->cam->Look();
@@ -486,6 +512,7 @@ int Frame(Window *W, unsigned clicks, int flag) {
 
     screen->gd->Light(0, GraphicsDevice::Position, &sbmap->home->light.pos.x);
     sbmap->Draw(*screen->cam);
+    if (draw_skybox_only) return 0;
 
     // Custom Scene::Draw();
     for (vector<Asset>::iterator a = asset.vec.begin(); a != asset.vec.end(); ++a) {
@@ -544,13 +571,13 @@ int Frame(Window *W, unsigned clicks, int flag) {
     goal->tex.Bind();
     win.Draw(goal->tex.coord);
 
-    static Font *font = Fonts::Get("Origicide.ttf", "", 16);
+    static Font *font = Fonts::Get(FLAGS_default_font, "", 16);
     font->Draw(StrCat(server->last_scored_PlayerName, " scores"),
                Box(win.x, win.y - screen->height*.1, screen->width*.2, screen->height*.1, false), 
                0, Font::DrawFlag::AlignCenter | Font::DrawFlag::NoWrap);
 
-    SpaceballTeam *scored_team = server->last_scored_team == Game::Team::Home ? sbmap->home : sbmap->away;
-    fireworks.rand_color_min = fireworks.rand_color_max = scored_team->goal_color;
+    bool home_team_scored = server->last_scored_team == Game::Team::Home;
+    fireworks.rand_color_min = fireworks.rand_color_max = home_team_scored ? home_goal_color : away_goal_color;
     fireworks.rand_color_min.scale(.6);
     for (int i=0; i<Fireworks::MaxParticles; i++) {
       if (fireworks.particles[i].dead) continue;
@@ -565,7 +592,7 @@ int Frame(Window *W, unsigned clicks, int flag) {
 
   if (server->gameover.enabled()) {
     Box win(screen->width*.4, screen->height*.9, screen->width*.2, screen->height*.1, false);
-    static Font *font = Fonts::Get("Origicide.ttf", "", 16);
+    static Font *font = Fonts::Get(FLAGS_default_font, "", 16);
     font->Draw(StrCat(server->gameover.start_ind == SpaceballGame::Team::Home ? sbmap->home->name : sbmap->away->name, " wins"),
                win, 0, Font::DrawFlag::AlignCenter);
   }
@@ -622,17 +649,16 @@ extern "C" void LFAppCreateCB() {
   FLAGS_soundasset_seconds = 1;
   FLAGS_scale_font_height = 320;
   FLAGS_font_engine = "atlas";
-  FLAGS_default_font = "Origicide.ttf";
+  FLAGS_default_font = "Origicide";
   FLAGS_default_font_flag = FLAGS_lfapp_console_font_flag = 0;
   FLAGS_lfapp_audio = FLAGS_lfapp_video = FLAGS_lfapp_input = FLAGS_lfapp_network = FLAGS_lfapp_console = 1;
+  FLAGS_depth_buffer_bits = 16;
 #if defined(LFL_ANDROID) || defined(LFL_IPHONE)
   FLAGS_target_fps = 30;
-  screen->width = 420;
-  screen->height = 380;
+  screen->SetSize(point(420, 380));
 #else
   FLAGS_target_fps = 50;
-  screen->width = 620;
-  screen->height = 480;
+  screen->SetSize(point(840, 760));
 #endif
   screen->caption = "Spaceball 6006";
   screen->multitouch_keyboard_x = .37;
@@ -645,10 +671,11 @@ extern "C" int main(int argc, const char *argv[]) {
   INFO("BUILD Version ", "1.02.1");
 
   FontEngine *atlas_engine = Singleton<AtlasFontEngine>::Get();
-  atlas_engine->Init(FontDesc("MobileAtlas", "", 0, Color::white, Color::clear, 0, false));
-  atlas_engine->Init(FontDesc("dpad_atlas",  "", 0, Color::white, Color::clear, 0, false));
-  atlas_engine->Init(FontDesc("sbmaps",      "", 0, Color::white, Color::clear, 0, false));
-  atlas_engine->Init(FontDesc("lightning",   "", 0, Color::white, Color::clear, 0, false));
+  atlas_engine->Init(FontDesc("MobileAtlas",                      "",  0, Color::white, Color::clear, 0, false));
+  atlas_engine->Init(FontDesc("dpad_atlas",                       "",  0, Color::white, Color::clear, 0, false));
+  atlas_engine->Init(FontDesc("sbmaps",                           "",  0, Color::white, Color::clear, 0, false));
+  atlas_engine->Init(FontDesc("lightning",                        "",  0, Color::white, Color::clear, 0, false));
+  atlas_engine->Init(FontDesc(StrCat(FLAGS_default_font, "Glow"), "", 32, Color::white, Color::clear, 0, false));
 
   save_settings.push_back("player_name");
   save_settings.push_back("first_run");
@@ -701,14 +728,14 @@ extern "C" int main(int argc, const char *argv[]) {
 
   if (screen->gd->ShaderSupport()) {
     string fader_shader  = LocalFile::FileContents(StrCat(app->assetdir, "fader.glsl"));
-    string warper_shader = LocalFile::FileContents(StrCat(app->assetdir, "warper.glsl"));
+    string warp_shader = LocalFile::FileContents(StrCat(app->assetdir, "warp.glsl"));
     string explode_shader = screen->gd->vertex_shader;
     CHECK(ReplaceString(&explode_shader, "// LFLPositionShaderMarker",
                         LocalFile::FileContents(StrCat(app->assetdir, "explode.glsl"))));
 
     Shader::Create("fadershader",   screen->gd->vertex_shader, fader_shader,             "",                     &fadershader);
-    Shader::Create("warpershader",  screen->gd->vertex_shader, warper_shader,            ShaderDefines(1,0,1,0), &warpershader);
     Shader::Create("explodeshader", explode_shader,            screen->gd->pixel_shader, ShaderDefines(0,1,1,0), &explodeshader);
+    Shader::CreateShaderToy("warpshader", warp_shader, &warpshader);
   }
 
   // ball trail
@@ -788,8 +815,10 @@ extern "C" int main(int argc, const char *argv[]) {
   if (sky->tex.cubemap) {
     ball->tex.ID = sky->tex.ID;
     ball->tex.cubemap = sky->tex.cubemap;
-    ball->texgen = TexGen::REFLECTION;
+    ball->texgen = TexGen::LINEAR;
     ball->geometry->material = 0;
+    ball->color = true;
+    ball->col = Color(1.4, 1.4, 1.4);
   }
 
   Game::Credits *credits = Singleton<Game::Credits>::Get();

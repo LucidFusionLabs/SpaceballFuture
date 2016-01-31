@@ -36,7 +36,8 @@ struct SpaceballSettings : public GameSettings {
 struct SpaceballTeam {
   string name, skybox_name; int font_index;
   Color field_color, goal_color, stripe_colors[6];
-  Light light; Material ship_color;
+  Light light;
+  Material ship_color;
 
   SpaceballTeam(const string &n, const string &sn, int fi, const Color &FC, const Color &GC, const Color &SC, const v4 &light_pos, const Color &light_color, bool stripe_color_fwd) 
     : name(n), skybox_name(sn), font_index(fi), field_color(FC), goal_color(GC) {
@@ -59,12 +60,14 @@ struct SpaceballTeam {
     }
     FATAL("no team found ", teams->size(), " ", filter?filter->name:"");
   }
+
   static SpaceballTeam *Get(const string &n) {
     static vector<SpaceballTeam> *teams = GetList();
     for (vector<SpaceballTeam>::iterator i = teams->begin(); i != teams->end(); ++i)
       if (i->name == n) return &(*i);
     return 0;
   }
+
   static vector<SpaceballTeam> *GetList() {
     static vector<SpaceballTeam> ret;
     if (ret.size()) return &ret;
@@ -252,6 +255,7 @@ struct SpaceballGame : public Game {
     *out += "\n";
     return Game::JoinRcon(cd, e, out);
   }
+
   bool JoinedRcon(ConnectionData *cd, Entity *e, string *out) { 
     StrAppend(out, "set_entity ", e->name, ".color1=", e->color1.HexString(), "\n");
     return Game::JoinedRcon(cd, e, out); 
@@ -530,6 +534,7 @@ struct SpaceballBots : public GameBots {
       }
       sort(players.begin(), players.end(), Player::sort_oppgoaldist);
     }
+
     void AssignLeftRightRolePair(int *ind, int left, int right) {
       if (*ind < players.size()) {
         players[(*ind)++].role = left;
@@ -540,6 +545,7 @@ struct SpaceballBots : public GameBots {
         if (players[*ind-1].entity->pos.x < players[*ind-2].entity->pos.x) swap(players[*ind-1].role, players[*ind-2].role);
       }
     }
+
     void AssignCoverage(Team *opponents) {
       Entity *carrier = 0;
       float not_behind_op = goal_center.z - opponents->goal_center.z;
@@ -697,6 +703,7 @@ struct SpaceballBots : public GameBots {
       b.entity->buttons = buttons.buttons;
     }
   }
+
   void Intercept(Bot *b, Entity *ball, Game::Controller *buttons) {
     v3 dir = ball->pos - b->entity->pos;
     dir.y = 0;
@@ -704,14 +711,18 @@ struct SpaceballBots : public GameBots {
     b->entity->ort = dir;
     buttons->SetForward();
   }
+
   bool Pass(Bot *b, Entity *ball, Game::Controller *buttons) {
     return false;
   }
+
   bool PassPainting(Bot *b, Entity *ball, Game::Controller *buttons) {
     return false;
   }
+
   void Dribble(Bot *b, Entity *ball, v3 dribble_target, Game::Controller *buttons) {
   }
+
   bool Shoot(Bot *b, Entity *ball, v3 goal_center, Game::Controller *buttons) {
     SpaceballGame *spaceball = (SpaceballGame*)world;
     v3 targ = goal_center;
@@ -720,11 +731,14 @@ struct SpaceballBots : public GameBots {
     b->entity->ort.Norm();
     return true;
   }
+
   bool Cover(Bot *b, Entity *ball, Entity *target, Game::Controller *buttons) {
     return false;
   }
+
   void EscapePursuit(Bot *b, Entity *ball, Entity *pursuer, Game::Controller *buttons) {
   }
+
   void RubberBandMovement(Bot *b, v3 zone, bool forward, Game::Controller *buttons) {
   }
 };
@@ -753,6 +767,7 @@ struct SpaceballServer : public GameServer {
     svc.push_back(gplus_transport);
 #endif
   }
+
   void RconRequestCB(Connection *c, Game::ConnectionData *cd, const string &cmd, const string &arg) {
     SpaceballGame *world = World();
     SpaceballBots *bots = Bots();
