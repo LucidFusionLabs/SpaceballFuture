@@ -29,59 +29,25 @@
 #include "spaceballserv.h"
 
 namespace LFL {
-AssetMap asset;
-SoundAssetMap soundasset;
-SpaceballSettings sbsettings;
-SpaceballMap *sbmap;
-Scene scene;
-Game *world;
-GameMenuGUI *menubar;
-GameChatGUI *chat;
-GamePlayerListGUI *playerlist;
-GameMultiTouchControls *touchcontrols;
-vector<string> save_settings;
-unsigned fb_tex1, fb_tex2;
-int map_transition, map_transition_start;
-bool draw_skybox_only;
-FrameBuffer framebuffer;
-Shader fadershader, warpshader, explodeshader;
-Color home_goal_color, away_goal_color;
-HelperGUI *helper;
-
 DEFINE_bool  (draw_fps,      true,                                  "Draw FPS");
 DEFINE_int   (default_port,  27640,                                 "Default port");
 DEFINE_string(master,        "lucidfusionlabs.com:27994/spaceball", "Master server list");
 DEFINE_string(player_name,   "",                                    "Player name");
 DEFINE_bool  (first_run,     true,                                  "First run of program");
 
-#define LFL_BUILTIN_SERVER
-#ifdef  LFL_BUILTIN_SERVER
-SpaceballServer *builtin_server;
-bool             builtin_server_enabled;
-#endif
-
-// Rippling caustics
-TextureArray caust;
-
-// Trails
 typedef Particles<256, 1, true> BallTrails;
-BallTrails ball_trail("BallTrails", true, .05, .05, 0, 0);
-Entity *ball_particles;
-
-// Shooting stars
 typedef Particles<256, 1, true> ShootingStars;
-ShootingStars shooting_stars("ShootingStars", true, .1, .2, 0, 0);
-Entity *star_particles;
-
-// Fireworks
 typedef Particles<1024, 1, true> Fireworks;
-Fireworks fireworks("Fireworks", true);
-vector<v3> fireworks_positions;
+typedef Particles<16, 1, true> Thrusters;
+typedef SpaceballGame::Ship MyShip;
+typedef SpaceballGame::Ball MyBall;
 
-#define MyShip SpaceballGame::Ship
-#define MyBall SpaceballGame::Ball
-
-int Frame(Window *W, unsigned clicks, int flag);
+struct MyAppState {
+  AssetMap asset;
+  SoundAssetMap soundasset;
+  TextureArray caust;
+  Shader fadershader, warpshader, explodeshader;
+} *my_app = new MyAppState();
 
 Geometry *FieldGeometry(const Color &rg, const Color &bg, const Color &fc) {
   vector<v3> verts, norm;
@@ -93,32 +59,32 @@ Geometry *FieldGeometry(const Color &rg, const Color &bg, const Color &fc) {
   int ci=0;
 
   /* field */
-  verts.push_back(fd->B); norm.push_back(up); tex.push_back(v2(0,  0));  col.push_back(fc.a(10 + ci++ * 6.0/255));
-  verts.push_back(fd->C); norm.push_back(up); tex.push_back(v2(tx, 0));  col.push_back(fc.a(10 + ci++ * 6.0/255));
-  verts.push_back(fd->G); norm.push_back(up); tex.push_back(v2(tx, ty)); col.push_back(fc.a(10 + ci++ * 6.0/255));
-  verts.push_back(fd->B); norm.push_back(up); tex.push_back(v2(0,  0));  col.push_back(fc.a(10 + ci++ * 6.0/255));
-  verts.push_back(fd->G); norm.push_back(up); tex.push_back(v2(tx, ty)); col.push_back(fc.a(10 + ci++ * 6.0/255));
-  verts.push_back(fd->F); norm.push_back(up); tex.push_back(v2(0,  ty)); col.push_back(fc.a(10 + ci++ * 6.0/255));
+  PushBack(&verts, &norm, &tex, &col, fd->B, up, v2(0,  0),  fc.a(10 + ci++ * 6.0/255));
+  PushBack(&verts, &norm, &tex, &col, fd->C, up, v2(tx, 0),  fc.a(10 + ci++ * 6.0/255));
+  PushBack(&verts, &norm, &tex, &col, fd->G, up, v2(tx, ty), fc.a(10 + ci++ * 6.0/255));
+  PushBack(&verts, &norm, &tex, &col, fd->B, up, v2(0,  0),  fc.a(10 + ci++ * 6.0/255));
+  PushBack(&verts, &norm, &tex, &col, fd->G, up, v2(tx, ty), fc.a(10 + ci++ * 6.0/255));
+  PushBack(&verts, &norm, &tex, &col, fd->F, up, v2(0,  ty), fc.a(10 + ci++ * 6.0/255));
   tx *= .15;
   ty *= .15;
 
   /* red goal */
   ci = 0;
-  verts.push_back(fd->B * goals); norm.push_back(rev); tex.push_back(v2(0,  0));  col.push_back(rg.a(10 + ci++ * 6.0/255));
-  verts.push_back(fd->C * goals); norm.push_back(rev); tex.push_back(v2(tx, 0));  col.push_back(rg.a(10 + ci++ * 6.0/255));
-  verts.push_back(fd->D * goals); norm.push_back(rev); tex.push_back(v2(tx, ty)); col.push_back(rg.a(10 + ci++ * 6.0/255));
-  verts.push_back(fd->B * goals); norm.push_back(rev); tex.push_back(v2(0,  0));  col.push_back(rg.a(10 + ci++ * 6.0/255));
-  verts.push_back(fd->D * goals); norm.push_back(rev); tex.push_back(v2(tx, ty)); col.push_back(rg.a(10 + ci++ * 6.0/255));
-  verts.push_back(fd->A * goals); norm.push_back(rev); tex.push_back(v2(0,  ty)); col.push_back(rg.a(10 + ci++ * 6.0/255));
+  PushBack(&verts, &norm, &tex, &col, fd->B * goals, rev, v2(0,  0),  rg.a(10 + ci++ * 6.0/255));
+  PushBack(&verts, &norm, &tex, &col, fd->C * goals, rev, v2(tx, 0),  rg.a(10 + ci++ * 6.0/255));
+  PushBack(&verts, &norm, &tex, &col, fd->D * goals, rev, v2(tx, ty), rg.a(10 + ci++ * 6.0/255));
+  PushBack(&verts, &norm, &tex, &col, fd->B * goals, rev, v2(0,  0),  rg.a(10 + ci++ * 6.0/255));
+  PushBack(&verts, &norm, &tex, &col, fd->D * goals, rev, v2(tx, ty), rg.a(10 + ci++ * 6.0/255));
+  PushBack(&verts, &norm, &tex, &col, fd->A * goals, rev, v2(0,  ty), rg.a(10 + ci++ * 6.0/255));
 
   /* blue goal */
   ci = 0;
-  verts.push_back(fd->F * goals); norm.push_back(fwd); tex.push_back(v2(0,  0));  col.push_back(bg.a(10 + ci++ * 6.0/255));
-  verts.push_back(fd->G * goals); norm.push_back(fwd); tex.push_back(v2(tx, 0));  col.push_back(bg.a(10 + ci++ * 6.0/255));
-  verts.push_back(fd->H * goals); norm.push_back(fwd); tex.push_back(v2(tx, ty)); col.push_back(bg.a(10 + ci++ * 6.0/255));
-  verts.push_back(fd->F * goals); norm.push_back(fwd); tex.push_back(v2(0,  0));  col.push_back(bg.a(10 + ci++ * 6.0/255));
-  verts.push_back(fd->H * goals); norm.push_back(fwd); tex.push_back(v2(tx, ty)); col.push_back(bg.a(10 + ci++ * 6.0/255));
-  verts.push_back(fd->E * goals); norm.push_back(fwd); tex.push_back(v2(0,  ty)); col.push_back(bg.a(10 + ci++ * 6.0/255));
+  PushBack(&verts, &norm, &tex, &col, fd->F * goals, fwd, v2(0,  0),  bg.a(10 + ci++ * 6.0/255));
+  PushBack(&verts, &norm, &tex, &col, fd->G * goals, fwd, v2(tx, 0),  bg.a(10 + ci++ * 6.0/255));
+  PushBack(&verts, &norm, &tex, &col, fd->H * goals, fwd, v2(tx, ty), bg.a(10 + ci++ * 6.0/255));
+  PushBack(&verts, &norm, &tex, &col, fd->F * goals, fwd, v2(0,  0),  bg.a(10 + ci++ * 6.0/255));
+  PushBack(&verts, &norm, &tex, &col, fd->H * goals, fwd, v2(tx, ty), bg.a(10 + ci++ * 6.0/255));
+  PushBack(&verts, &norm, &tex, &col, fd->E * goals, fwd, v2(0,  ty), bg.a(10 + ci++ * 6.0/255));
 
   return new Geometry(GraphicsDevice::Triangles, verts.size(), &verts[0], 0, &tex[0], &col[0]);
 }
@@ -126,54 +92,22 @@ Geometry *FieldGeometry(const Color &rg, const Color &bg, const Color &fc) {
 Geometry *FieldLines(float tx, float ty) {
   SpaceballGame::FieldDefinition *fd = SpaceballGame::FieldDefinition::get();
   vector<v3> verts; vector<v2> tex;
-  verts.push_back(fd->B); tex.push_back(v2(0,  0));
-  verts.push_back(fd->C); tex.push_back(v2(tx, 0));
-  verts.push_back(fd->G); tex.push_back(v2(tx, ty));
-  verts.push_back(fd->B); tex.push_back(v2(0,  0));
-  verts.push_back(fd->G); tex.push_back(v2(tx, ty));
-  verts.push_back(fd->F); tex.push_back(v2(0,  ty));
-  return new Geometry(GraphicsDevice::Triangles, verts.size(), &verts[0], 0, &tex[0], (Color*)0);
-}
-
-void SpaceballMap::Draw(const Entity &camera) { skybox.Draw(); }
-void SpaceballMap::Load(const string &home_name, const string &away_name) {
-  home = SpaceballTeam::Get(home_name);
-  away = SpaceballTeam::Get(away_name);
-  if (!home || !away) { ERROR("unknown team: ", home_name, " or ", away_name); return; }
-  skybox.Load(home->skybox_name);
-
-  home_goal_color = home->goal_color;
-  away_goal_color = away->goal_color;
-  asset("shipred" )->col = home->ship_color.diffuse;
-  asset("shipblue")->col = away->ship_color.diffuse;
-
-  float hh, hs, hv, ah, as, av;
-  home_goal_color.ToHSV(&hh, &hs, &hv);
-  away_goal_color.ToHSV(&ah, &as, &av);
-  float angle_dist = min(360 - fabs(hh - ah), fabs(hh - ah));
-  if (angle_dist < 60) {
-    bool reverse = ah < hh;
-    away_goal_color = Color::FromHSV(ah + (reverse ? -180 : 180), as, av);
-    away->ship_color.diffuse.ToHSV(&ah, &as, &av);
-    asset("shipblue")->col = Color::FromHSV(ah + (reverse ? -180 : 180), as, av);
-  }
-
-  Asset *field = asset("field");
-  Replace<Geometry>(&field->geometry, FieldGeometry(home_goal_color, away_goal_color, home->field_color));
-
-  screen->gd->EnableLight(0);
-  screen->gd->Light(0, GraphicsDevice::Ambient,  home->light.color.ambient.x);
-  screen->gd->Light(0, GraphicsDevice::Diffuse,  home->light.color.diffuse.x);
-  screen->gd->Light(0, GraphicsDevice::Specular, home->light.color.specular.x);
+  PushBack(&verts, &tex, fd->B, v2(0,  0));
+  PushBack(&verts, &tex, fd->C, v2(tx, 0));
+  PushBack(&verts, &tex, fd->G, v2(tx, ty));
+  PushBack(&verts, &tex, fd->B, v2(0,  0));
+  PushBack(&verts, &tex, fd->G, v2(tx, ty));
+  PushBack(&verts, &tex, fd->F, v2(0,  ty));
+  return new Geometry(GraphicsDevice::Triangles, verts.size(), &verts[0], 0, &tex[0], NullPointer<Color>());
 }
 
 void ShipDraw(Asset *a, Entity *e) {
-  static Geometry *stripes = Geometry::LoadOBJ(StrCat(app->assetdir, "ship_stripes.obj"));
-  scene.Select(stripes);
+  static unique_ptr<Geometry> stripes = Geometry::LoadOBJ(StrCat(app->assetdir, "ship_stripes.obj"));
+  Scene::Select(stripes.get());
   screen->gd->SetColor(e->color1);
-  Scene::Draw(stripes, e);
+  Scene::Draw(stripes.get(), e);
 
-  scene.Select(a);
+  Scene::Select(a);
   Shader *anim_shader = 0;
   if (e->animation.ShaderActive()) {
     anim_shader = e->animation.shader;
@@ -186,13 +120,13 @@ void ShipDraw(Asset *a, Entity *e) {
   static Timer lightning_timer;
   static float last_lightning_offset = 0;
   static int lightning_texcoord_min_int_x = 0;
-  static Font *lightning_font = Fonts::Get("lightning");
+  static Font *lightning_font = app->fonts->Get("lightning");
   static Glyph *lightning_glyph = lightning_font->FindGlyph(2);
-  static Geometry *lightning_obj = 0;
+  static unique_ptr<Geometry> lightning_obj;
   if (!lightning_obj) {
     float lightning_glyph_texcoord[4];
     memcpy(lightning_glyph_texcoord, lightning_glyph->tex.coord, sizeof(lightning_glyph_texcoord));
-    lightning_glyph_texcoord[Texture::CoordMaxX] *= .1;
+    lightning_glyph_texcoord[Texture::maxx_coord_ind] *= .1;
     lightning_obj = Geometry::LoadOBJ(StrCat(app->assetdir, "ship_lightning.obj"), lightning_glyph_texcoord);
   }
   screen->gd->BindTexture(GraphicsDevice::Texture2D, lightning_glyph->tex.ID);
@@ -203,12 +137,12 @@ void ShipDraw(Asset *a, Entity *e) {
                                 &lightning_texcoord_min_int_x);
   last_lightning_offset = lightning_offset;
 
-  scene.Select(lightning_obj);
+  Scene::Select(lightning_obj.get());
   screen->gd->EnableBlend();
   Color c = e->color1;
   c.scale(2.0);
   screen->gd->SetColor(c);
-  Scene::Draw(lightning_obj, e);
+  Scene::Draw(lightning_obj.get(), e);
 }
 
 void SetInitialCameraPosition() {
@@ -220,12 +154,11 @@ void SetInitialCameraPosition() {
 
 struct SpaceballClient : public GameClient {
   Entity *ball=0;
-  Time map_started;
   int last_scored_team=0;
   string last_scored_PlayerName;
-  typedef Particles<16, 1, true> Thrusters;
   vector<v3> thrusters_transform;
-  SpaceballClient(Game *w, GUI *PlayerList, TextArea *Chat) : GameClient(w, PlayerList, Chat), map_started(Now()) {
+  function<void(const string&, const string&, int)> map_changed_cb;
+  SpaceballClient(Game *w, GUI *PlayerList, TextArea *Chat) : GameClient(w, PlayerList, Chat) {
     thrusters_transform.push_back(v3(-.575, -.350, -.1));
     thrusters_transform.push_back(v3( .525, -.350, -.1));
     thrusters_transform.push_back(v3(-.025,  .525, -.1));
@@ -251,16 +184,19 @@ struct SpaceballClient : public GameClient {
       e->particles = thrusters;
     }
   }
+
   void DelEntityCB(Entity *e) {
     if (!e) return;
     if (ball == e) ball = 0;
-    if (e->particles) delete (Thrusters*)e->particles;
+    if (e->particles) delete FromVoid<Thrusters*>(e->particles);
   }
+
   void AnimationChange(Entity *e, int NewID, int NewSeq) {
-    static SoundAsset *bounce = soundasset("bounce");
+    static SoundAsset *bounce = my_app->soundasset("bounce");
     if      (NewID == SpaceballGame::AnimShipBoost) app->PlaySoundEffect(bounce);
-    else if (NewID == SpaceballGame::AnimExplode)   e->animation.Start(&explodeshader);
+    else if (NewID == SpaceballGame::AnimExplode)   e->animation.Start(&my_app->explodeshader);
   }
+
   void RconRequestCB(const string &cmd, const string &arg, int seq) { 
     // INFO("cmd: ", cmd, " ", arg);
     if (cmd == "goal") {
@@ -270,7 +206,7 @@ struct SpaceballClient : public GameClient {
       INFO(last_scored_PlayerName, " scores for ", last_scored_team == Game::Team::Red ? "red" : "blue");
 
       unsigned updateInterval = (last.time_recv_WorldUpdate[0] - last.time_recv_WorldUpdate[1]).count();
-      replay.start_ind = max(1, (int)(last.WorldUpdate.size() - (SpaceballGame::ReplaySeconds-1) * 1000.0 / updateInterval));
+      replay.start_ind = max(1, int(last.WorldUpdate.size() - (SpaceballGame::ReplaySeconds-1) * 1000.0 / updateInterval));
       replay.while_seq = last.seq_WorldUpdate = seq;
       replay.start = Now();
 
@@ -293,40 +229,29 @@ struct SpaceballClient : public GameClient {
     } else if (cmd == "map") {
       vector<string> args;
       Split(arg, isspace, &args);
-      if (args.size() != 3) { ERROR("map ", arg); return; }
-      draw_skybox_only = true;
-      framebuffer.Attach(fb_tex1);
-      screen->RenderToFrameBuffer(&framebuffer);
-      sbmap->Load(args[0], args[1]);
-      framebuffer.Attach(fb_tex2);
-      screen->RenderToFrameBuffer(&framebuffer);
-      draw_skybox_only = false;
-      map_started = Now() - Time(atoi(args[2]));
-      map_transition = map_transition_start = Seconds(3).count();
+      if (args.size() != 3) return ERROR("map ", arg);
+      map_changed_cb(args[0], args[1], atoi(args[2]));
     } else {
-      ERROR("unknown rcon: ", cmd, " ", arg); return;
+      return ERROR("unknown rcon: ", cmd, " ", arg);
     }
   }
-} *server;
+};
 
 struct TeamSelectGUI : public GUI {
   vector<SpaceballTeam> *teams;
-  Font *font, *bright_font, *glow_font, *team_font;
+  FontRef font, bright_font, glow_font, team_font;
   Widget::Button start_button;
   vector<Widget::Button> team_buttons;
   int home_team=0, away_team=0;
 
-  TeamSelectGUI(Window *w) : GUI(w), teams(SpaceballTeam::GetList()),
-  font       (Fonts::Get(FLAGS_default_font,                 "", 8, Color::grey80)),
-  bright_font(Fonts::Get(FLAGS_default_font,                 "", 8, Color::white)),
-  glow_font  (Fonts::Get(StrCat(FLAGS_default_font, "Glow"), "", 8, Color::white)),
-  team_font  (Fonts::Get("sbmaps")),
-  start_button(this, 0, bright_font, "start", MouseController::CB(bind(&TeamSelectGUI::Start, this))) {
+  TeamSelectGUI() : teams(SpaceballTeam::GetList()),
+  font       (FontDesc(FLAGS_default_font,                 "", 8, Color::grey80)),
+  bright_font(FontDesc(FLAGS_default_font,                 "", 8, Color::white)),
+  glow_font  (FontDesc(StrCat(FLAGS_default_font, "Glow"), "", 8, Color::white)),
+  team_font  (FontDesc("sbmaps")),
+  start_button(this, 0, "start", MouseController::CB(bind(&TeamSelectGUI::Start, this))) {
     start_button.outline = &bright_font->fg;
     team_buttons.resize(teams->size());
-    for (int i=0; i<team_buttons.size(); i++) team_buttons[i] =
-      Widget::Button(this, team_font->FindGlyph((*teams)[i].font_index), font, (*teams)[i].name,
-                     MouseController::CB(bind(&TeamSelectGUI::SetHomeTeamIndex, this, i)));
   }
 
   void SetHomeTeamIndex(int n) { home_team = n; child_box.Clear(); }
@@ -336,19 +261,23 @@ struct TeamSelectGUI : public GUI {
     glShadertoyShaderWindows(MyShader, Color(25, 60, 130, 120), box);
     GUI::Draw();
     screen->gd->SetColor(Color::white);
-    BoxOutline().Draw(team_buttons[home_team].GetHitBoxBox());
+    BoxOutline(3).Draw(team_buttons[home_team].GetHitBoxBox());
   }
 
   void Layout() {
+    CHECK(font.Load() && bright_font.Load() && glow_font.Load() && team_font.Load());
+    for (int i=0; i<team_buttons.size(); i++) team_buttons[i] =
+      Widget::Button(this, team_font->FindGlyph((*teams)[i].font_index), (*teams)[i].name,
+                     MouseController::CB(bind(&TeamSelectGUI::SetHomeTeamIndex, this, i)));
+
     box = screen->Box(.1, .1, .8, .8);
     int bw=box.w*2/13.0, bh=bw, sx=bw/2, px=(box.w - (bw*4 + sx*3))/2;
     Flow flow(&box, font, Reset());
     flow.AppendNewlines(1);
     flow.p.x += px;
     for (int i = 0; i < team_buttons.size(); i++) {
-      team_buttons[i].font = home_team == i ? glow_font : font;
       team_buttons[i].box = Box(bw, bh);
-      team_buttons[i].Layout(&flow);
+      team_buttons[i].Layout(&flow, home_team == i ? glow_font : font);
       flow.p.x += sx;
 
       if ((i+1) % 4 != 0) continue;
@@ -357,294 +286,509 @@ struct TeamSelectGUI : public GUI {
     }
     flow.layout.align_center = 1;
     start_button.box = screen->Box(.4, .05);
-    start_button.Layout(&flow);
+    start_button.Layout(&flow, bright_font);
     flow.Complete();
   }
-} *team_select;
+};
 
-void MyLocalServerDisable() {
-#ifdef LFL_BUILTIN_SERVER
-  if (builtin_server_enabled) {
-    builtin_server_enabled = false;
-    app->network->Shutdown(builtin_server->svc);
-    app->network->Disable(builtin_server->svc);
-  }
+struct MyGameWindow : public GUI {
+#define LFL_BUILTIN_SERVER
+#ifdef  LFL_BUILTIN_SERVER
+  SpaceballServer *builtin_server=0;
+  bool             builtin_server_enabled=0;
 #endif
-}
+  SpaceballClient *server=0;
+  SpaceballSettings sbsettings;
+  Scene scene;
+  Game *world=0;
+  GameMenuGUI *menubar=0;
+  GameChatGUI *chat=0;
+  GamePlayerListGUI *playerlist=0;
+  TeamSelectGUI *team_select=0;
+  GameMultiTouchControls *touchcontrols=0;
+  vector<string> save_settings = {"player_name", "first_run", "msens"};
+  unsigned fb_tex1=0, fb_tex2=0;
+  Time map_started = Now();
+  int map_transition=0, map_transition_start=0, caust_ind=0;
+  bool draw_skybox_only=0;
+  FrameBuffer framebuffer;
+  Color home_goal_color, away_goal_color;
+  HelperGUI *helper=0;
+  Entity *star_particles, *ball_particles;
+  BallTrails ball_trail;
+  ShootingStars shooting_stars;
+  Fireworks fireworks;
+  vector<v3> fireworks_positions;
+  SpaceballTeam *home_team=0, *away_team=0;
+  Skybox skybox;
 
-void MyGameFinished(SpaceballGame *world) {
-  if (world->game_players == SpaceballSettings::PLAYERS_MULTIPLE) return world->StartNextGame(builtin_server);
+  MyGameWindow() : framebuffer(screen->gd), ball_trail("BallTrails", true, .05, .05, 0, 0),
+  shooting_stars("ShootingStars", true, .1, .2, 0, 0), fireworks("Fireworks", true)
+  {
+    // field
+    scene.Add(new Entity("lines", my_app->asset("lines")));
+    scene.Add(new Entity("field", my_app->asset("field"),
+              Entity::DrawCB(bind(&TextureArray::DrawSequence, &my_app->caust, _1, _2, &caust_ind))));
 
-  MyLocalServerDisable();
-  server->Reset();
+    // ball trail
+    ball_trail.emitter_type = BallTrails::Emitter::Sprinkler | BallTrails::Emitter::RainbowFade;
+#if 0
+    ball_trail.emitter_type = BallTrails::Emitter::Sprinkler | BallTrails::Emitter::GlowFade;
+    ball_trail.floor = true;
+    ball_trail.floorval = Spaceball::FieldDefinition::get()->B.y;
+#endif
+    ball_trail.ticks_step = 10;
+    ball_trail.gravity = -3;
+    ball_trail.age_min = 1;
+    ball_trail.age_max = 3;
+    ball_trail.radius_decay = false;
+    ball_trail.texture = my_app->asset("particles")->tex.ID;
+    ball_trail.billboard = true;
+    ball_particles = new Entity("ball_particles", my_app->asset("particles"),
+                                Entity::DrawCB(bind(&BallTrails::AssetDrawCB, &ball_trail, screen->gd, _1, _2)));
+    scene.Add(ball_particles);
 
-  if (world->game_type == SpaceballSettings::TYPE_TOURNAMENT) team_select->active = true;
-  else { menubar->Activate(); menubar->selected = 1; }
+    // shooting stars
+    my_app->asset("stars")->tex.ID = my_app->asset("particles")->tex.ID;
+    shooting_stars.texture = my_app->asset("particles")->tex.ID;
+    shooting_stars.burst = 16;
+    shooting_stars.color = Color(1.0, 1.0, 1.0, 1.0);
+    shooting_stars.ticks_step = 10;
+    shooting_stars.gravity = 0;
+    shooting_stars.age_min = .2;
+    shooting_stars.age_max = .6;
+    shooting_stars.radius_decay = true;
+    shooting_stars.billboard = true;
+    shooting_stars.vel = v3(0, 0, -1);
+    shooting_stars.always_on = false;
+    star_particles = new Entity("star_particles", my_app->asset("stars"),
+                                Entity::DrawCB(bind(&ShootingStars::AssetDrawCB, &shooting_stars, screen->gd, _1, _2)));
+    star_particles->pos = v3(0, -4, 5);
+    // scene.add(star_particles);
 
-  SetInitialCameraPosition();
-}
+    // fireworks
+    fireworks_positions.resize(2);
+    fireworks.texture = my_app->asset("particles")->tex.ID;
+    fireworks.pos_transform = &fireworks_positions;
+    fireworks.rand_color = true;
 
-void MyLocalServerEnable(int game_type) {
-  MyLocalServerDisable();
+    menubar = screen->AddGUI(make_unique<GameMenuGUI>(FLAGS_master.c_str(), FLAGS_default_port, my_app->asset("title"), my_app->asset("glow")));
+    menubar->tab3_player_name.AssignInput(FLAGS_player_name);
+    menubar->settings = &sbsettings;
+    menubar->Activate();
+    menubar->selected = 1;
+    screen->gui.push_back(&menubar->topbar);
+    playerlist = screen->AddGUI(make_unique<GamePlayerListGUI>("Spaceball 6006", "Team 1: silver", "Team 2: ontario"));
+    chat = screen->AddGUI(make_unique<GameChatGUI>('t', reinterpret_cast<GameClient**>(&server)));
+    team_select = screen->AddGUI(make_unique<TeamSelectGUI>());
+
+    world = new SpaceballGame(&scene);
+    server = new SpaceballClient(world, playerlist, chat);
+    server->map_changed_cb = bind(&MyGameWindow::HandleMapChanged, this, _1, _2, _3);
+
+    // init frame buffer
+    framebuffer.Create(screen->width, screen->height, FrameBuffer::Flag::CreateTexture | FrameBuffer::Flag::ReleaseFB);
+    fb_tex1 = framebuffer.tex.ID;
+    framebuffer.AllocTexture(&fb_tex2);
+
+    SpaceballTeam *home = SpaceballTeam::GetRandom();
+    LoadMap(home->name, SpaceballTeam::GetRandom(home)->name);
+    SetInitialCameraPosition();
+
+    if (FLAGS_multitouch) {
+      touchcontrols = new GameMultiTouchControls(server);
+      helper = new HelperGUI();
+      const Box &lw = touchcontrols->lpad_win, &rw = touchcontrols->rpad_win;
+      helper->AddLabel(Box(lw.x + lw.w*.15, lw.y + lw.h*.5,  1, 1), "move left",     HelperGUI::Hint::UPLEFT);
+      helper->AddLabel(Box(lw.x + lw.w*.85, lw.y + lw.h*.5,  1, 1), "move right",    HelperGUI::Hint::UPRIGHT);
+      helper->AddLabel(Box(lw.x + lw.w*.5,  lw.y + lw.h*.85, 1, 1), "move forward",  HelperGUI::Hint::UP);
+      helper->AddLabel(Box(lw.x + lw.w*.5,  lw.y + lw.h*.15, 1, 1), "move back",     HelperGUI::Hint::DOWN);
+      helper->AddLabel(Box(rw.x + rw.w*.15, rw.y + rw.h*.5,  1, 1), "turn left",     HelperGUI::Hint::UPLEFT);
+      helper->AddLabel(Box(rw.x + rw.w*.85, rw.y + rw.h*.5,  1, 1), "turn right",    HelperGUI::Hint::UPRIGHT);
+      helper->AddLabel(Box(rw.x + rw.w*.5,  rw.y + rw.h*.85, 1, 1), "burst forward", HelperGUI::Hint::UP);
+      helper->AddLabel(Box(rw.x + rw.w*.5,  rw.y + rw.h*.15, 1, 1), "change player", HelperGUI::Hint::DOWN);
+      helper->AddLabel(Box(screen->width*(screen->multitouch_keyboard_x + .035), screen->height*.025, 1, 1), "keyboard", HelperGUI::Hint::UPLEFT);
+      helper->AddLabel(menubar->topbar.box, "options menu", HelperGUI::Hint::DOWN, .15);
+    }
+  }
+
+  void DisableLocalServer() {
+#ifdef LFL_BUILTIN_SERVER
+    if (builtin_server_enabled) {
+      builtin_server_enabled = false;
+      app->net->Shutdown(builtin_server->svc);
+      app->net->Disable(builtin_server->svc);
+    }
+#endif
+  }
+
+  void EnableLocalServer(int game_type) {
+    DisableLocalServer();
 
 #ifdef LFL_BUILTIN_SERVER
-  if (!builtin_server) {
-    builtin_server = new SpaceballServer(StrCat(FLAGS_player_name, "'s server"), FLAGS_default_port, 20, &asset.vec);
-    builtin_server->bots = new SpaceballBots(builtin_server->world);
-    builtin_server->World()->game_finished_cb = bind(&MyGameFinished, builtin_server->World());
-  }
+    if (!builtin_server) {
+      builtin_server = new SpaceballServer(StrCat(FLAGS_player_name, "'s server"), FLAGS_default_port, 20, &my_app->asset.vec);
+      builtin_server->bots = new SpaceballBots(builtin_server->world);
+      builtin_server->World()->game_finished_cb = bind(&MyGameWindow::HandleGameFinished, this, builtin_server->World());
+    }
 
-  if (!builtin_server_enabled) {
-    builtin_server_enabled = true;
-    app->network->Enable(builtin_server->svc);
-  }
+    if (!builtin_server_enabled) {
+      builtin_server_enabled = true;
+      app->net->Enable(builtin_server->svc);
+    }
 
-  SpaceballGame *world = builtin_server->World();
-  if (menubar->selected == 1) world->game_players = SpaceballSettings::PLAYERS_SINGLE;
-  else                        world->game_players = SpaceballSettings::PLAYERS_MULTIPLE;
-  world->game_type = sbsettings.GetIndex(SpaceballSettings::GAME_TYPE);
-  world->game_limit = sbsettings.GetIndex(SpaceballSettings::GAME_LIMIT);
-  world->game_control = sbsettings.GetIndex(SpaceballSettings::GAME_CONTROL);
-  bool tourny = world->game_type == SpaceballSettings::TYPE_TOURNAMENT;
-  if (!tourny) world->RandomTeams();
-  else { 
-    world->home = &(*team_select->teams)[team_select->home_team];
-    world->away = SpaceballTeam::GetRandom(world->home);
-  }
+    SpaceballGame *world = builtin_server->World();
+    if (menubar->selected == 1) world->game_players = SpaceballSettings::PLAYERS_SINGLE;
+    else                        world->game_players = SpaceballSettings::PLAYERS_MULTIPLE;
+    world->game_type = sbsettings.GetIndex(SpaceballSettings::GAME_TYPE);
+    world->game_limit = sbsettings.GetIndex(SpaceballSettings::GAME_LIMIT);
+    world->game_control = sbsettings.GetIndex(SpaceballSettings::GAME_CONTROL);
+    bool tourny = world->game_type == SpaceballSettings::TYPE_TOURNAMENT;
+    if (!tourny) world->RandomTeams();
+    else { 
+      world->home = &(*team_select->teams)[team_select->home_team];
+      world->away = SpaceballTeam::GetRandom(world->home);
+    }
 
-  builtin_server->bots->Clear();
-  bool empty = game_type == SpaceballSettings::TYPE_EMPTYCOURT, spectator = game_type == SpaceballSettings::TYPE_SIMULATION;
-  if (!empty) {
-    builtin_server->bots->Insert(SpaceballGame::PlayersPerTeam*2);
-    if (!spectator) builtin_server->bots->RemoveFromTeam(tourny ? Game::Team::Home : Game::Team::Random());
-  }
+    builtin_server->bots->Clear();
+    bool empty = game_type == SpaceballSettings::TYPE_EMPTYCOURT, spectator = game_type == SpaceballSettings::TYPE_SIMULATION;
+    if (!empty) {
+      builtin_server->bots->Insert(SpaceballGame::PlayersPerTeam*2);
+      if (!spectator) builtin_server->bots->RemoveFromTeam(tourny ? Game::Team::Home : Game::Team::Random());
+    }
 
-  world->Reset();
+    world->Reset();
 #endif    
-}
-
-void MyLocalServerCmd(const vector<string>&) {
-  int game_type = sbsettings.GetIndex(SpaceballSettings::GAME_TYPE);
-  if (game_type == SpaceballSettings::TYPE_TOURNAMENT) {
-    if (!team_select->active) { team_select->active = true; return; }
-    team_select->active = false;
-  }
-  MyLocalServerEnable(game_type);
-  server->Connect("127.0.0.1", FLAGS_default_port);
-}
-
-void MyServerCmd(const vector<string> &arg) {
-  MyLocalServerDisable();
-  if (arg.empty()) { INFO("eg: server 192.168.1.144:", FLAGS_default_port); return; }
-  server->Connect(arg[0], FLAGS_default_port);
-}
-
-void MyGPlusClientCmd(const vector<string> &arg) {
-#ifdef LFL_ANDROID
-  menubar->Deactivate();
-  MyLocalServerDisable();
-  if (arg.empty()) { INFO("eg: gplus_client participant_id"); return; }
-  INFO("GPlusClient ", arg[0]);
-  // android_gplus_service(Singleton<GPlusClient>::Get());
-  // server->connectGPlus(arg[0]);
-#endif
-}
-
-void MyGPlusServerCmd(const vector<string> &arg) {
-#ifdef LFL_ANDROID
-  menubar->Deactivate();
-  MyLocalServerEnable(SpaceballSettings::TYPE_EMPTYCOURT);
-  if (arg.empty()) { INFO("eg: gplus_server participant_id"); return; }
-  INFO("GPlusServer ", arg[0]);
-  // android_gplus_service(builtin_server->gplus_transport);
-  // server->connect("127.0.0.1", FLAGS_default_port);
-#endif
-}
-
-void MySwitchPlayerCmd(const vector<string> &) {
-  if (server) server->Rcon("player_switch");
-}
-
-void MyFieldColorCmd(const vector<string> &arg) {
-  Color fc(arg.size() ? arg[0] : "");
-  Asset *field = asset("field");
-  Replace<Geometry>(&field->geometry, FieldGeometry(home_goal_color, away_goal_color, fc));
-  INFO("field_color = ", fc.HexString());
-}
-
-// LFL::Application FrameCB
-int Frame(Window *W, unsigned clicks, int flag) {
-  screen->binds->Repeat(clicks);
-
-  if (Singleton<FlagMap>::Get()->dirty) {
-    Singleton<FlagMap>::Get()->dirty = false;
-    SettingsFile::Write(save_settings, LFAppDownloadDir(), "settings");
   }
 
-  if (FLAGS_multitouch) {
-    static int last_rpad_down = 0;
-    bool changed = touchcontrols->rpad_down != last_rpad_down;
-    last_rpad_down = touchcontrols->rpad_down;
-    if (changed && touchcontrols->rpad_down == GameMultiTouchControls::DOWN) { MySwitchPlayerCmd(vector<string>()); }
-    if (changed && touchcontrols->rpad_down == GameMultiTouchControls::UP)   { /* release = fire! */ }
-    else                                                                     { server->MoveBoost(0); }
+  void HandleGameFinished(SpaceballGame *world) {
+    if (world->game_players == SpaceballSettings::PLAYERS_MULTIPLE) return world->StartNextGame(builtin_server);
+
+    DisableLocalServer();
+    server->Reset();
+
+    if (world->game_type == SpaceballSettings::TYPE_TOURNAMENT) team_select->active = true;
+    else { menubar->Activate(); menubar->selected = 1; }
+
+    SetInitialCameraPosition();
   }
+
+  void HandleMapChanged(const string &home, const string &away, int t) {
+    draw_skybox_only = true;
+    framebuffer.Attach(fb_tex1);
+    screen->RenderToFrameBuffer(&framebuffer);
+    LoadMap(home, away);
+    framebuffer.Attach(fb_tex2);
+    screen->RenderToFrameBuffer(&framebuffer);
+    draw_skybox_only = false;
+    map_started = Now() - Time(t);
+    map_transition = map_transition_start = Seconds(3).count();
+  }
+  
+  void LoadMap(const string &home_name, const string &away_name) {
+    home_team = SpaceballTeam::Get(home_name);
+    away_team = SpaceballTeam::Get(away_name);
+    if (!home_team || !away_team) { ERROR("unknown team: ", home_name, " or ", away_name); return; }
+    skybox.Load(home_team->skybox_name);
+
+    home_goal_color = home_team->goal_color;
+    away_goal_color = away_team->goal_color;
+    my_app->asset("shipred" )->col = home_team->ship_color.diffuse;
+    my_app->asset("shipblue")->col = away_team->ship_color.diffuse;
+
+    float hh, hs, hv, ah, as, av;
+    home_goal_color.ToHSV(&hh, &hs, &hv);
+    away_goal_color.ToHSV(&ah, &as, &av);
+    float angle_dist = min(360 - fabs(hh - ah), fabs(hh - ah));
+    if (angle_dist < 60) {
+      bool reverse = ah < hh;
+      away_goal_color = Color::FromHSV(ah + (reverse ? -180 : 180), as, av);
+      away_team->ship_color.diffuse.ToHSV(&ah, &as, &av);
+      my_app->asset("shipblue")->col = Color::FromHSV(ah + (reverse ? -180 : 180), as, av);
+    }
+
+    Asset *field = my_app->asset("field");
+    delete field->geometry;
+    field->geometry = FieldGeometry(home_goal_color, away_goal_color, home_team->field_color);
+
+    screen->gd->EnableLight(0);
+    screen->gd->Light(0, GraphicsDevice::Ambient,  home_team->light.color.ambient.x);
+    screen->gd->Light(0, GraphicsDevice::Diffuse,  home_team->light.color.diffuse.x);
+    screen->gd->Light(0, GraphicsDevice::Specular, home_team->light.color.specular.x);
+  }
+
+  int Frame(Window *W, unsigned clicks, int flag) {
+    screen->GetInputController<BindMap>(0)->Repeat(clicks);
+
+    if (Singleton<FlagMap>::Get()->dirty) {
+      Singleton<FlagMap>::Get()->dirty = false;
+      SettingsFile::Write(save_settings, LFAppDownloadDir(), "settings");
+    }
+
+    if (FLAGS_multitouch) {
+      static int last_rpad_down = 0;
+      bool changed = touchcontrols->rpad_down != last_rpad_down;
+      last_rpad_down = touchcontrols->rpad_down;
+      if (changed && touchcontrols->rpad_down == GameMultiTouchControls::DOWN) { SwitchPlayerCmd(vector<string>()); }
+      if (changed && touchcontrols->rpad_down == GameMultiTouchControls::UP)   { /* release = fire! */ }
+      else                                                                     { server->MoveBoost(0); }
+    }
 
 #ifdef LFL_BUILTIN_SERVER
-  if (builtin_server_enabled) builtin_server->Frame();
+    if (builtin_server_enabled) builtin_server->Frame();
 #endif
 
-  if (map_transition > 0) {
-    map_transition -= clicks;
-    screen->gd->DrawMode(DrawMode::_2D);
-    FLAGS_shadertoy_blend = 1 - (float)map_transition / map_transition_start;
-    glShadertoyShaderWindows(&warpshader, Color::grey60, screen->Box(), &framebuffer.tex);
-    return 0;
+    if (map_transition > 0) {
+      map_transition -= clicks;
+      screen->gd->DrawMode(DrawMode::_2D);
+      FLAGS_shadertoy_blend = 1 - float(map_transition) / map_transition_start;
+      glShadertoyShaderWindows(&my_app->warpshader, Color::grey60, screen->Box(), &framebuffer.tex);
+      return 0;
 
-  } else {
-    screen->cam->Look();
-    shooting_stars.Update(clicks, 0, 0, 0);
-    ball_trail.Update(clicks, 0, 0, 0);
-    if (server->ball) ball_particles->pos = server->ball->pos;
+    } else {
+      screen->cam->Look(screen->gd);
+      shooting_stars.Update(screen->cam.get(), clicks, 0, 0, 0);
+      ball_trail.Update(screen->cam.get(), clicks, 0, 0, 0);
+      if (server->ball) ball_particles->pos = server->ball->pos;
 
-    Scene::EntityVector deleted;
-    Scene::LastUpdatedFilter scene_filter_deleted(0, server->last.time_frame, &deleted);
+      Scene::EntityVector deleted;
+      Scene::LastUpdatedFilter scene_filter_deleted(0, server->last.time_frame, &deleted);
 
-    screen->gd->Light(0, GraphicsDevice::Position, &sbmap->home->light.pos.x);
-    sbmap->Draw(*screen->cam);
-    if (draw_skybox_only) return 0;
+      screen->gd->Light(0, GraphicsDevice::Position, &home_team->light.pos.x);
+      skybox.Draw();
+      if (draw_skybox_only) return 0;
 
-    // Custom Scene::Draw();
-    for (vector<Asset>::iterator a = asset.vec.begin(); a != asset.vec.end(); ++a) {
-      if (a->zsort) continue;
-      if (a->name == "lines") {
-        scene.Draw(&(*a));
-        screen->gd->EnableDepthTest();
-      } else if (a->name == "ball") {
-        scene.Draw(&(*a), &scene_filter_deleted);
-      } else {
-        scene.Draw(&(*a));
+      // Custom Scene::Draw();
+      for (auto &a : my_app->asset.vec) {
+        if (a.zsort) continue;
+        if (a.name == "lines") {
+          scene.Draw(&a);
+          screen->gd->EnableDepthTest();
+        } else if (a.name == "ball") {
+          scene.Draw(&a, &scene_filter_deleted);
+        } else {
+          scene.Draw(&a);
+        }
       }
+
+      scene.ZSort(my_app->asset.vec);
+      scene.ZSortDraw(&scene_filter_deleted, clicks);
+      server->WorldDeleteEntity(deleted);
     }
 
-    scene.ZSort(asset.vec);
-    scene.ZSortDraw(&scene_filter_deleted, clicks);
-    server->WorldDeleteEntity(deleted);
-  }
+    screen->gd->DrawMode(DrawMode::_2D);
+    chat->Draw();
 
-  screen->gd->DrawMode(DrawMode::_2D);
-  chat->Draw();
+    if (FLAGS_multitouch) {
+      touchcontrols->Update(clicks);
+      touchcontrols->Draw();
 
-  if (FLAGS_multitouch) {
-    touchcontrols->Update(clicks);
-    touchcontrols->Draw();
+      // iPhone keyboard
+      // static Font *mobile_font = Fonts::Get("MobileAtlas", "", 0, Color::white, Color::clear, 0);
+      // static Widget::Button iPhoneKeyboardButton(screen->gui_root, 0, 0, Box::FromScreen(screen->multitouch_keyboard_x, .05, .07, .05),
+      //                                           MouseController::CB(bind(&Shell::showkeyboard, &app->shell, vector<string>())));
+      // iPhoneKeyboardButton.Draw(mobile_font, 5);
 
-    // iPhone keyboard
-    // static Font *mobile_font = Fonts::Get("MobileAtlas", "", 0, Color::white, Color::clear, 0);
-    // static Widget::Button iPhoneKeyboardButton(screen->gui_root, 0, 0, Box::FromScreen(screen->multitouch_keyboard_x, .05, .07, .05),
-    //                                           MouseController::CB(bind(&Shell::showkeyboard, &app->shell, vector<string>())));
-    // iPhoneKeyboardButton.Draw(mobile_font, 5);
+      // Game menu and player list buttons
+      // static Widget::Button gamePlayerListButton(root, 0, 0, Box::FromScreen(.465, .05, .07, .05), MouseController::CB(bind(&GUI::ToggleDisplay, (GUI*)playerlist)));
+      // static Widget::Button           helpButton(root, 0, 0, Box::FromScreen(.56,  .05, .07, .05), MouseController::CB(bind(&GUI::ToggleDisplay, (GUI*)helper)));
 
-    // Game menu and player list buttons
-    // static Widget::Button gamePlayerListButton(root, 0, 0, Box::FromScreen(.465, .05, .07, .05), MouseController::CB(bind(&GUI::ToggleDisplay, (GUI*)playerlist)));
-    // static Widget::Button           helpButton(root, 0, 0, Box::FromScreen(.56,  .05, .07, .05), MouseController::CB(bind(&GUI::ToggleDisplay, (GUI*)helper)));
-
-    // if (helper && gamePlayerListButton.init) helper->AddLabel(gamePlayerListButton.win, "player list", HelperGUI::Hint::UP, .08);
-    // if (helper &&           helpButton.init) helper->AddLabel(          helpButton.win, "help",        HelperGUI::Hint::UPRIGHT);
-    // gamePlayerListButton.Draw(mobile_font, 4);
-    // helpButton.Draw(mobile_font, 6);
-  }
-
-  if (server->replay.enabled()) {
-    if (server->ball) {
-      // Replay camera tracks ball
-      v3 targ = server->ball->pos + server->ball->vel;
-      v3 yaw_delta = v3::Norm(targ - v3(screen->cam->pos.x, targ.y, screen->cam->pos.z));
-      v3 ort = v3::Norm(targ - screen->cam->pos);
-      v3 delta = ort - yaw_delta;
-      screen->cam->up = v3(0,1,0) + delta;
-      screen->cam->ort = ort;
+      // if (helper && gamePlayerListButton.init) helper->AddLabel(gamePlayerListButton.win, "player list", HelperGUI::Hint::UP, .08);
+      // if (helper &&           helpButton.init) helper->AddLabel(          helpButton.win, "help",        HelperGUI::Hint::UPRIGHT);
+      // gamePlayerListButton.Draw(mobile_font, 4);
+      // helpButton.Draw(mobile_font, 6);
     }
 
-    Box win(screen->width*.4, screen->height*.8, screen->width*.2, screen->height*.1, false);
-    Asset *goal = asset("goal");
-    goal->tex.Bind();
-    win.Draw(goal->tex.coord);
+    if (server->replay.enabled()) {
+      if (server->ball) {
+        // Replay camera tracks ball
+        v3 targ = server->ball->pos + server->ball->vel;
+        v3 yaw_delta = v3::Norm(targ - v3(screen->cam->pos.x, targ.y, screen->cam->pos.z));
+        v3 ort = v3::Norm(targ - screen->cam->pos);
+        v3 delta = ort - yaw_delta;
+        screen->cam->up = v3(0,1,0) + delta;
+        screen->cam->ort = ort;
+      }
 
-    static Font *font = Fonts::Get(FLAGS_default_font, "", 16);
-    font->Draw(StrCat(server->last_scored_PlayerName, " scores"),
-               Box(win.x, win.y - screen->height*.1, screen->width*.2, screen->height*.1, false), 
-               0, Font::DrawFlag::AlignCenter | Font::DrawFlag::NoWrap);
+      Box win(screen->width*.4, screen->height*.8, screen->width*.2, screen->height*.1, false);
+      Asset *goal = my_app->asset("goal");
+      goal->tex.Bind();
+      win.Draw(goal->tex.coord);
 
-    bool home_team_scored = server->last_scored_team == Game::Team::Home;
-    fireworks.rand_color_min = fireworks.rand_color_max = home_team_scored ? home_goal_color : away_goal_color;
-    fireworks.rand_color_min.scale(.6);
-    for (int i=0; i<Fireworks::MaxParticles; i++) {
-      if (fireworks.particles[i].dead) continue;
-      fireworks.particles[i].InitColor();
+      static Font *font = app->fonts->Get(FLAGS_default_font, "", 16);
+      font->Draw(StrCat(server->last_scored_PlayerName, " scores"),
+                 Box(win.x, win.y - screen->height*.1, screen->width*.2, screen->height*.1, false), 
+                 0, Font::DrawFlag::AlignCenter | Font::DrawFlag::NoWrap);
+
+      bool home_team_scored = server->last_scored_team == Game::Team::Home;
+      fireworks.rand_color_min = fireworks.rand_color_max = home_team_scored ? home_goal_color : away_goal_color;
+      fireworks.rand_color_min.scale(.6);
+      for (int i=0; i<Fireworks::MaxParticles; i++) {
+        if (fireworks.particles[i].dead) continue;
+        fireworks.particles[i].InitColor();
+      }
+      fireworks_positions[0].set(-screen->width*.2, screen->height*.8, 0);
+      fireworks_positions[1].set(-screen->width*.8, screen->height*.8, 0);
+      fireworks.Update(screen->cam.get(), clicks, 0, 0, 0);
+      fireworks.Draw(screen->gd);
+      scene.Select();
     }
-    fireworks_positions[0].set(-screen->width*.2, screen->height*.8, 0);
-    fireworks_positions[1].set(-screen->width*.8, screen->height*.8, 0);
-    fireworks.Update(clicks, 0, 0, 0);
-    fireworks.Draw();
-    scene.Select();
+
+    if (server->gameover.enabled()) {
+      Box win(screen->width*.4, screen->height*.9, screen->width*.2, screen->height*.1, false);
+      static Font *font = app->fonts->Get(FLAGS_default_font, "", 16);
+      font->Draw(StrCat(server->gameover.start_ind == SpaceballGame::Team::Home ? home_team->name : away_team->name, " wins"),
+                 win, 0, Font::DrawFlag::AlignCenter);
+    }
+
+    if (server->replay.just_ended) {
+      server->replay.just_ended = false;
+      screen->cam->ort = SpaceballGame::StartOrientation(server->team);
+      screen->cam->up  = v3(0, 1, 0);
+    }
+
+    if (team_select->active) team_select->Draw(my_app->fadershader.ID > 0 ? &my_app->fadershader : 0);
+
+    // Press escape for menubar
+    else if (menubar->active) menubar->Draw(clicks, my_app->fadershader.ID > 0 ? &my_app->fadershader : 0);
+
+    // Press 't' to talk
+    else if (chat->Active()) {}
+
+    // Press tab for playerlist
+    else if (playerlist->active || server->gameover.enabled()) {
+      server->control.SetPlayerList();
+      playerlist->Draw(my_app->fadershader.ID > 0 ? &my_app->fadershader : 0);
+    }
+
+    // Press tick for console
+    else screen->DrawDialogs();
+
+    Scene::Select();
+
+    if (helper && helper->active) {
+      screen->gd->SetColor(helper->font->fg);
+      BoxOutline().Draw(menubar->topbar.box);
+      helper->Draw();
+    }
+
+    screen->gd->EnableBlend();
+    static Font *text = app->fonts->Get(FLAGS_default_font, "", 8);
+    if (FLAGS_draw_fps)   text->Draw(StringPrintf("FPS = %.2f", app->FPS()),           point(screen->width*.05, screen->height*.05));
+    if (!menubar->active) text->Draw(intervalminutes(Now() - map_started),             point(screen->width*.93, screen->height*.97));
+    if (!menubar->active) text->Draw(StrCat(home_team->name, " vs ", away_team->name), point(screen->width*.01, screen->height*.97));
+
+    return 0;
   }
 
-  if (server->gameover.enabled()) {
-    Box win(screen->width*.4, screen->height*.9, screen->width*.2, screen->height*.1, false);
-    static Font *font = Fonts::Get(FLAGS_default_font, "", 16);
-    font->Draw(StrCat(server->gameover.start_ind == SpaceballGame::Team::Home ? sbmap->home->name : sbmap->away->name, " wins"),
-               win, 0, Font::DrawFlag::AlignCenter);
+  void ServerCmd(const vector<string> &arg) {
+    DisableLocalServer();
+    if (arg.empty()) { INFO("eg: server 192.168.1.144:", FLAGS_default_port); return; }
+    server->Connect(arg[0], FLAGS_default_port);
   }
 
-  if (server->replay.just_ended) {
-    server->replay.just_ended = false;
-    screen->cam->ort = SpaceballGame::StartOrientation(server->team);
-    screen->cam->up  = v3(0, 1, 0);
+  void LocalServerCmd(const vector<string>&) {
+    int game_type = sbsettings.GetIndex(SpaceballSettings::GAME_TYPE);
+    if (game_type == SpaceballSettings::TYPE_TOURNAMENT) {
+      if (!team_select->active) { team_select->active = true; return; }
+      team_select->active = false;
+    }
+    EnableLocalServer(game_type);
+    server->Connect("127.0.0.1", FLAGS_default_port);
   }
 
-  if (team_select->active) team_select->Draw(fadershader.ID > 0 ? &fadershader : 0);
-
-  // Press escape for menubar
-  else if (menubar->active) menubar->Draw(clicks, fadershader.ID > 0 ? &fadershader : 0);
-
-  // Press 't' to talk
-  else if (chat->Active()) {}
-
-  // Press tab for playerlist
-  else if (playerlist->active || server->gameover.enabled()) {
-    server->control.SetPlayerList();
-    playerlist->Draw(fadershader.ID > 0 ? &fadershader : 0);
+  void GPlusServerCmd(const vector<string> &arg) {
+#ifdef LFL_ANDROID
+    menubar->Deactivate();
+    EnableLocalServer(SpaceballSettings::TYPE_EMPTYCOURT);
+    if (arg.empty()) { INFO("eg: gplus_server participant_id"); return; }
+    INFO("GPlusServer ", arg[0]);
+    // android_gplus_service(builtin_server->gplus_transport);
+    // server->connect("127.0.0.1", FLAGS_default_port);
+#endif
   }
 
-  // Press tick for console
-  else screen->DrawDialogs();
-
-  Scene::Select();
-
-  if (helper && helper->active) {
-    screen->gd->SetColor(helper->font->fg);
-    BoxOutline().Draw(menubar->topbar.box);
-    helper->Draw();
+  void GPlusClientCmd(const vector<string> &arg) {
+#ifdef LFL_ANDROID
+    menubar->Deactivate();
+    DisableLocalServer();
+    if (arg.empty()) { INFO("eg: gplus_client participant_id"); return; }
+    INFO("GPlusClient ", arg[0]);
+    // android_gplus_service(app->net->gplus_client.get());
+    // server->connectGPlus(arg[0]);
+#endif
   }
 
-  screen->gd->EnableBlend();
-  static Font *text = Fonts::Get(FLAGS_default_font, "", 8);
-  if (FLAGS_draw_fps)   text->Draw(StringPrintf("FPS = %.2f", FPS()),                    point(screen->width*.05, screen->height*.05));
-  if (!menubar->active) text->Draw(intervalminutes(Now() - server->map_started),         point(screen->width*.93, screen->height*.97));
-  if (!menubar->active) text->Draw(StrCat(sbmap->home->name, " vs ", sbmap->away->name), point(screen->width*.01, screen->height*.97));
+  void SwitchPlayerCmd(const vector<string> &) { if (server) server->Rcon("player_switch"); }
+  void FieldColorCmd(const vector<string> &arg) {
+    Color fc(arg.size() ? arg[0] : "");
+    Asset *field = my_app->asset("field");
+    delete field->geometry;
+    field->geometry = FieldGeometry(home_goal_color, away_goal_color, fc);
+    INFO("field_color = ", fc.HexString());
+  }
+};
 
-  return 0;
+void MyWindowInit(Window *W) {
+  W->caption = "Spaceball 6006";
+  W->multitouch_keyboard_x = .37;
 }
+
+void MyWindowStart(Window *W) {
+  CHECK_EQ(0, W->NewGUI());
+  MyGameWindow *game_gui = W->ReplaceGUI(0, make_unique<MyGameWindow>());
+  W->frame_cb = bind(&MyGameWindow::Frame, game_gui, _1, _2, _3);
+  if (FLAGS_lfapp_console) W->InitConsole(Callback());
+
+  BindMap *binds = W->AddInputController(make_unique<BindMap>());
+#if 0                                   
+  binds->Add('w',             Bind::TimeCB(bind(&Entity::MoveFwd,       W->camMain, _1)));
+  binds->Add('s',             Bind::TimeCB(bind(&Entity::MoveRev,       W->camMain, _1)));
+  binds->Add('a',             Bind::TimeCB(bind(&Entity::MoveLeft,      W->camMain, _1)));
+  binds->Add('d',             Bind::TimeCB(bind(&Entity::MoveRight,     W->camMain, _1)));
+  binds->Add('q',             Bind::TimeCB(bind(&Entity::MoveDown,      W->camMain, _1)));
+  binds->Add('e',             Bind::TimeCB(bind(&Entity::MoveUp,        W->camMain, _1)));
+#else
+  binds->Add('w',             Bind::TimeCB(bind(&GameClient::MoveFwd,   game_gui->server, _1)));
+  binds->Add('s',             Bind::TimeCB(bind(&GameClient::MoveRev,   game_gui->server, _1)));
+  binds->Add('a',             Bind::TimeCB(bind(&GameClient::MoveLeft,  game_gui->server, _1)));
+  binds->Add('d',             Bind::TimeCB(bind(&GameClient::MoveRight, game_gui->server, _1)));
+  binds->Add('q',             Bind::TimeCB(bind(&GameClient::MoveDown,  game_gui->server, _1)));
+  binds->Add('e',             Bind::TimeCB(bind(&GameClient::MoveUp,    game_gui->server, _1)));
+#endif
+#if !defined(LFL_IPHONE) && !defined(LFL_ANDROID)
+  binds->Add(Mouse::Button::_1, Bind::TimeCB(bind(&SpaceballClient::MoveBoost, game_gui->server, _1)));
+#endif
+  binds->Add(Key::LeftShift,  Bind::TimeCB(bind(&Entity::RollLeft,   W->cam.get(), _1)));
+  binds->Add(Key::Space,      Bind::TimeCB(bind(&Entity::RollRight,  W->cam.get(), _1)));
+  binds->Add(Key::Tab,        Bind::TimeCB(bind(&GUI::Activate, game_gui->playerlist)));
+  binds->Add(Key::F1,         Bind::CB(bind(&GameClient::SetCamera,  game_gui->server,  vector<string>(1, string("1")))));
+  binds->Add(Key::F2,         Bind::CB(bind(&GameClient::SetCamera,  game_gui->server,  vector<string>(1, string("2")))));
+  binds->Add(Key::F3,         Bind::CB(bind(&GameClient::SetCamera,  game_gui->server,  vector<string>(1, string("3")))));
+  binds->Add(Key::F4,         Bind::CB(bind(&GameClient::SetCamera,  game_gui->server,  vector<string>(1, string("4")))));
+  binds->Add(Key::Return,     Bind::CB(bind(&Shell::grabmode,        W->shell.get(),    vector<string>())));
+  binds->Add('r',             Bind::CB(bind(&MyGameWindow::SwitchPlayerCmd, game_gui, vector<string>()))); 
+  binds->Add('t',             Bind::CB(bind([=](){ game_gui->chat->ToggleActive(); })));
+  binds->Add(Key::Escape,     Bind::CB(bind([=](){ game_gui->menubar->ToggleActive(); })));
+  binds->Add(Key::Backquote,  Bind::CB(bind([=](){ if (!game_gui->menubar->active) W->shell->console(vector<string>()); })));
+  binds->Add(Key::Quote,      Bind::CB(bind([=](){ if (!game_gui->menubar->active) W->shell->console(vector<string>()); })));
+
+  W->shell = make_unique<Shell>(&my_app->asset, &my_app->soundasset, nullptr);
+  W->shell->Add("server",       bind(&MyGameWindow::ServerCmd,      game_gui, _1));
+  W->shell->Add("field_color",  bind(&MyGameWindow::FieldColorCmd,  game_gui, _1));
+  W->shell->Add("local_server", bind(&MyGameWindow::LocalServerCmd, game_gui, _1));
+  W->shell->Add("gplus_client", bind(&MyGameWindow::GPlusClientCmd, game_gui, _1));
+  W->shell->Add("gplus_server", bind(&MyGameWindow::GPlusServerCmd, game_gui, _1));
+  W->shell->Add("rcon",         bind(&GameClient::RconCmd,      game_gui->server, _1));
+  W->shell->Add("name",         bind(&GameClient::SetName,      game_gui->server, _1));
+  W->shell->Add("team",         bind(&GameClient::SetTeam,      game_gui->server, _1));
+  W->shell->Add("me",           bind(&GameClient::MyEntityName, game_gui->server, _1));
+};
 
 }; // namespace LFL
 using namespace LFL;
 
 extern "C" void LFAppCreateCB() {
-  app->name = "Spaceball";
-#ifdef LFL_DEBUG
-  app->logfilename = StrCat(LFAppDownloadDir(), "spaceball.txt");
-#endif
   FLAGS_far_plane = 1000;
   FLAGS_soundasset_seconds = 1;
   FLAGS_scale_font_height = 320;
@@ -660,26 +804,28 @@ extern "C" void LFAppCreateCB() {
   FLAGS_target_fps = 50;
   screen->SetSize(point(840, 760));
 #endif
-  screen->caption = "Spaceball 6006";
-  screen->multitouch_keyboard_x = .37;
-  screen->frame_cb = Frame;
+#ifdef LFL_DEBUG
+  app->logfilename = StrCat(LFAppDownloadDir(), "spaceball.txt");
+#endif
+  app->name = "Spaceball";
+  app->window_start_cb = MyWindowStart;
+  app->window_init_cb = MyWindowInit;
+  app->window_init_cb(screen);
+  app->exit_cb = []{ delete my_app; };
 }
 
 extern "C" int main(int argc, const char *argv[]) {
-  if (app->Create(argc, argv, __FILE__, LFAppCreateCB)) { app->Free(); return -1; }
-  if (app->Init())                                      { app->Free(); return -1; }
+  if (app->Create(argc, argv, __FILE__, LFAppCreateCB)) return -1;
+  if (app->Init())                                      return -1;
   INFO("BUILD Version ", "1.02.1");
 
-  FontEngine *atlas_engine = Singleton<AtlasFontEngine>::Get();
+  FontEngine *atlas_engine = app->fonts->atlas_engine.get();
   atlas_engine->Init(FontDesc("MobileAtlas",                      "",  0, Color::white, Color::clear, 0, false));
   atlas_engine->Init(FontDesc("dpad_atlas",                       "",  0, Color::white, Color::clear, 0, false));
   atlas_engine->Init(FontDesc("sbmaps",                           "",  0, Color::white, Color::clear, 0, false));
   atlas_engine->Init(FontDesc("lightning",                        "",  0, Color::white, Color::clear, 0, false));
   atlas_engine->Init(FontDesc(StrCat(FLAGS_default_font, "Glow"), "", 32, Color::white, Color::clear, 0, false));
 
-  save_settings.push_back("player_name");
-  save_settings.push_back("first_run");
-  save_settings.push_back("msens");
   SettingsFile::Read(LFAppDownloadDir(), "settings");
   Singleton<FlagMap>::Get()->dirty = false;
   screen->gd->default_draw_mode = DrawMode::_3D;
@@ -697,34 +843,28 @@ extern "C" int main(int argc, const char *argv[]) {
     Singleton<FlagMap>::Get()->Set("first_run", "0");
   }
 
-  // assets.Add(Asset(name,     texture,          scale,            trans, rotate, geometry      hull,                            cubemap,     texgen, callback));
-  asset.Add(Asset("particles",  "particle.png",   1,                0,     0,      0,            0,                               0,           0,      Asset::DrawCB(bind(&BallTrails::AssetDrawCB,    &ball_trail,     _1, _2))));
-  asset.Add(Asset("stars",      "",               1,                0,     0,      0,            0,                               0,           0,      Asset::DrawCB(bind(&ShootingStars::AssetDrawCB, &shooting_stars, _1, _2))));
-  asset.Add(Asset("glow",       "glow.png",       1,                0,     0,      0,            0,                               0,           0));
-  asset.Add(Asset("field",      "",               1,                0,     0,      0,            0,                               0,           0,      Asset::DrawCB(bind(&TextureArray::DrawSequence, &caust, _1, _2))));
-  asset.Add(Asset("lines",      "lines.png",      1,                0,     0,      0,            0,                               0,           0));
-  asset.Add(Asset("ball",       "",               MyBall::radius(), 1,     0,      "sphere.obj", 0,                               0));
-  asset.Add(Asset("ship",       "ship.png",       .05,              1,     0,      "ship.obj",   Cube::Create(MyShip::radius()),  0,                   Asset::DrawCB(bind(&ShipDraw, _1, _2))));
-  asset.Add(Asset("shipred",    "",               0,                0,     0,      0,            0,                               0,           0));
-  asset.Add(Asset("shipblue",   "",               0,                0,     0,      0,            0,                               0,           0));
-  asset.Add(Asset("title",      "title.png",      1,                0,     0,      0,            0,                               0,           0));
-  asset.Add(Asset("goal",       "goal.png",       1,                0,     0,      0,            0,                               0,           0));
-  asset.Load();
-  app->shell.assets = &asset;
-
-  // soundasset.Add(SoundAsset(name,  filename,              ringbuf, channels, sample_rate, seconds ));
-  soundasset.Add(SoundAsset("music",  "dstsecondballad.mp3", 0,       0,        0,           0       ));
-  soundasset.Add(SoundAsset("bounce", "scififortyfive.wav",  0,       0,        0,           0       ));
-  soundasset.Load();
-  app->shell.soundassets = &soundasset;
-
-  caust.Load("%s%02d.%s", "caust", "png", 32);
-  scene.Add(new Entity("field", asset("field")));
-  asset("field")->blendt = GraphicsDevice::SrcAlpha;
-
-  Asset *lines = asset("lines");
+  // my_app->assets.Add(name,     texture,          scale,            trans, rotate, geometry      hull,                            cubemap,     texgen));
+  my_app->asset.Add("particles",  "particle.png",   1,                0,     0,      nullptr,      nullptr,                         0,           0);
+  my_app->asset.Add("stars",      "",               1,                0,     0,      nullptr,      nullptr,                         0,           0);
+  my_app->asset.Add("glow",       "glow.png",       1,                0,     0,      nullptr,      nullptr,                         0,           0);
+  my_app->asset.Add("field",      "",               1,                0,     0,      nullptr,      nullptr,                         0,           0);
+  my_app->asset.Add("lines",      "lines.png",      1,                0,     0,      nullptr,      nullptr,                         0,           0);
+  my_app->asset.Add("ball",       "",               MyBall::radius(), 1,     0,      "sphere.obj", nullptr,                         0);
+  my_app->asset.Add("ship",       "ship.png",       .05,              1,     0,      "ship.obj",   Cube::Create(MyShip::radius()).release(), 0, &ShipDraw);
+  my_app->asset.Add("shipred",    "",               0,                0,     0,      nullptr,      nullptr,                         0,           0);
+  my_app->asset.Add("shipblue",   "",               0,                0,     0,      nullptr,      nullptr,                         0,           0);
+  my_app->asset.Add("title",      "title.png",      1,                0,     0,      nullptr,      nullptr,                         0,           0);
+  my_app->asset.Add("goal",       "goal.png",       1,                0,     0,      nullptr,      nullptr,                         0,           0);
+  my_app->asset.Load();
+  my_app->asset("field")->blendt = GraphicsDevice::SrcAlpha;
+  Asset *lines = my_app->asset("lines");
   lines->geometry = FieldLines(lines->tex.coord[2], lines->tex.coord[3]);
-  scene.Add(new Entity("lines", lines));
+  my_app->caust.Load("%s%02d.%s", "caust", "png", 32);
+
+  // soundasset.Add(name,  filename,              ringbuf, channels, sample_rate, seconds );
+  my_app->soundasset.Add("music",  "dstsecondballad.mp3", nullptr, 0,        0,           0       );
+  my_app->soundasset.Add("bounce", "scififortyfive.wav",  nullptr, 0,        0,           0       );
+  my_app->soundasset.Load();
 
   if (screen->gd->ShaderSupport()) {
     string fader_shader  = LocalFile::FileContents(StrCat(app->assetdir, "fader.glsl"));
@@ -733,85 +873,24 @@ extern "C" int main(int argc, const char *argv[]) {
     CHECK(ReplaceString(&explode_shader, "// LFLPositionShaderMarker",
                         LocalFile::FileContents(StrCat(app->assetdir, "explode.glsl"))));
 
-    Shader::Create("fadershader",   screen->gd->vertex_shader, fader_shader,             "",                     &fadershader);
-    Shader::Create("explodeshader", explode_shader,            screen->gd->pixel_shader, ShaderDefines(0,1,1,0), &explodeshader);
-    Shader::CreateShaderToy("warpshader", warp_shader, &warpshader);
+    Shader::Create("fadershader",   screen->gd->vertex_shader, fader_shader,             "",                     &my_app->fadershader);
+    Shader::Create("explodeshader", explode_shader,            screen->gd->pixel_shader, ShaderDefines(0,1,1,0), &my_app->explodeshader);
+    Shader::CreateShaderToy("warpshader", warp_shader, &my_app->warpshader);
   }
 
-  // ball trail
-  ball_trail.emitter_type = BallTrails::Emitter::Sprinkler | BallTrails::Emitter::RainbowFade;
-#if 0
-  ball_trail.emitter_type = BallTrails::Emitter::Sprinkler | BallTrails::Emitter::GlowFade;
-  ball_trail.floor = true;
-  ball_trail.floorval = Spaceball::FieldDefinition::get()->B.y;
-#endif
-  ball_trail.ticks_step = 10;
-  ball_trail.gravity = -3;
-  ball_trail.age_min = 1;
-  ball_trail.age_max = 3;
-  ball_trail.radius_decay = false;
-  ball_trail.texture = asset("particles")->tex.ID;
-  ball_trail.billboard = true;
-  ball_particles = new Entity("ball_particles", asset("particles"));
-  scene.Add(ball_particles);
-
-  // shooting stars
-  asset("stars")->tex.ID = asset("particles")->tex.ID;
-  shooting_stars.texture = asset("particles")->tex.ID;
-  shooting_stars.burst = 16;
-  shooting_stars.color = Color(1.0, 1.0, 1.0, 1.0);
-  shooting_stars.ticks_step = 10;
-  shooting_stars.gravity = 0;
-  shooting_stars.age_min = .2;
-  shooting_stars.age_max = .6;
-  shooting_stars.radius_decay = true;
-  shooting_stars.billboard = true;
-  shooting_stars.vel = v3(0, 0, -1);
-  shooting_stars.always_on = false;
-
-  star_particles = new Entity("star_particles", asset("stars"));
-  star_particles->pos = v3(0, -4, 5);
-  // scene.add(star_particles);
-
-  // fireworks
-  fireworks_positions.resize(2);
-  fireworks.texture = asset("particles")->tex.ID;
-  fireworks.pos_transform = &fireworks_positions;
-  fireworks.rand_color = true;
-
-  menubar = new GameMenuGUI(screen, FLAGS_master.c_str(), FLAGS_default_port, asset("title"), asset("glow"));
-  menubar->tab3_player_name.AssignInput(FLAGS_player_name);
-  menubar->settings = &sbsettings;
-  menubar->Activate();
-  menubar->selected = 1;
-
-  playerlist = new GamePlayerListGUI(screen, "Spaceball 6006", "Team 1: silver", "Team 2: ontario");
-  chat = new GameChatGUI(screen, 't', (GameClient**)&server);
-  team_select = new TeamSelectGUI(screen);
-
-  world = new SpaceballGame(&scene);
-  server = new SpaceballClient(world, playerlist, chat);
-
-  // init frame buffer
-  framebuffer.Create(screen->width, screen->height, FrameBuffer::Flag::CreateTexture | FrameBuffer::Flag::ReleaseFB);
-  fb_tex1 = framebuffer.tex.ID;
-  framebuffer.AllocTexture(&fb_tex2);
-
   // Color ships red and blue
-  Asset *ship = asset("ship"), *shipred = asset("shipred"), *shipblue = asset("shipblue");
-  ship->particleTexID = asset("glow")->tex.ID;
+  Asset *ship = my_app->asset("ship"), *shipred = my_app->asset("shipred"), *shipblue = my_app->asset("shipblue");
+  ship->particleTexID = my_app->asset("glow")->tex.ID;
   ship->zsort = true;
   Asset::Copy(ship, shipred);
   Asset::Copy(ship, shipblue);
   shipred->color = shipblue->color = true;
 
-  sbmap = new SpaceballMap();
-  SpaceballTeam *home = SpaceballTeam::GetRandom();
-  sbmap->Load(home->name, SpaceballTeam::GetRandom(home)->name);
-  SetInitialCameraPosition();
+  app->window_start_cb(screen);
+  MyGameWindow *game_gui = screen->GetOwnGUI<MyGameWindow>(0);
 
   // add reflection to ball
-  Asset *ball = asset("ball"), *sky = sbmap->SkyboxAsset();
+  Asset *ball = my_app->asset("ball"), *sky = game_gui->skybox.asset();
   if (sky->tex.cubemap) {
     ball->tex.ID = sky->tex.ID;
     ball->tex.cubemap = sky->tex.cubemap;
@@ -822,74 +901,12 @@ extern "C" int main(int argc, const char *argv[]) {
   }
 
   Game::Credits *credits = Singleton<Game::Credits>::Get();
-  credits->push_back(Game::Credit("Game",         "koldfuzor",    "http://www.lucidfusionlabs.com/", ""));
-  credits->push_back(Game::Credit("Skyboxes",     "3delyvisions", "http://www.3delyvisions.com/",    ""));
-  credits->push_back(Game::Credit("Physics",      "Box2D",        "http://box2d.org/",               ""));
-  credits->push_back(Game::Credit("Fonts",        "Cpr.Sparhelt", "http://www.facebook.com/pages/Magique-Fonts-Koczman-B%C3%A1lint/110683665690882", ""));
-  credits->push_back(Game::Credit("Image format", "Libpng",       "http://www.libpng.org/",          ""));
+  credits->emplace_back("Game",         "koldfuzor",    "http://www.lucidfusionlabs.com/", "");
+  credits->emplace_back("Skyboxes",     "3delyvisions", "http://www.3delyvisions.com/",    "");
+  credits->emplace_back("Physics",      "Box2D",        "http://box2d.org/",               "");
+  credits->emplace_back("Fonts",        "Cpr.Sparhelt", "http://www.facebook.com/pages/Magique-Fonts-Koczman-B%C3%A1lint/110683665690882", "");
+  credits->emplace_back("Image format", "Libpng",       "http://www.libpng.org/",          "");
 
-  // start music
-  app->PlayBackgroundMusic(soundasset("music"));
-
-  if (FLAGS_multitouch) {
-    touchcontrols = new GameMultiTouchControls(server);
-    helper = new HelperGUI(screen);
-    const Box &lw = touchcontrols->lpad_win, &rw = touchcontrols->rpad_win;
-    helper->AddLabel(Box(lw.x + lw.w*.15, lw.y + lw.h*.5,  1, 1), "move left",     HelperGUI::Hint::UPLEFT);
-    helper->AddLabel(Box(lw.x + lw.w*.85, lw.y + lw.h*.5,  1, 1), "move right",    HelperGUI::Hint::UPRIGHT);
-    helper->AddLabel(Box(lw.x + lw.w*.5,  lw.y + lw.h*.85, 1, 1), "move forward",  HelperGUI::Hint::UP);
-    helper->AddLabel(Box(lw.x + lw.w*.5,  lw.y + lw.h*.15, 1, 1), "move back",     HelperGUI::Hint::DOWN);
-    helper->AddLabel(Box(rw.x + rw.w*.15, rw.y + rw.h*.5,  1, 1), "turn left",     HelperGUI::Hint::UPLEFT);
-    helper->AddLabel(Box(rw.x + rw.w*.85, rw.y + rw.h*.5,  1, 1), "turn right",    HelperGUI::Hint::UPRIGHT);
-    helper->AddLabel(Box(rw.x + rw.w*.5,  rw.y + rw.h*.85, 1, 1), "burst forward", HelperGUI::Hint::UP);
-    helper->AddLabel(Box(rw.x + rw.w*.5,  rw.y + rw.h*.15, 1, 1), "change player", HelperGUI::Hint::DOWN);
-    helper->AddLabel(Box(screen->width*(screen->multitouch_keyboard_x + .035), screen->height*.025, 1, 1), "keyboard", HelperGUI::Hint::UPLEFT);
-    helper->AddLabel(menubar->topbar.box, "options menu", HelperGUI::Hint::DOWN, .15);
-  }
-
-  app->shell.command.push_back(Shell::Command("server",       bind(&MyServerCmd,      _1)));
-  app->shell.command.push_back(Shell::Command("field_color",  bind(&MyFieldColorCmd,  _1)));
-  app->shell.command.push_back(Shell::Command("local_server", bind(&MyLocalServerCmd, _1)));
-  app->shell.command.push_back(Shell::Command("gplus_client", bind(&MyGPlusClientCmd, _1)));
-  app->shell.command.push_back(Shell::Command("gplus_server", bind(&MyGPlusServerCmd, _1)));
-  app->shell.command.push_back(Shell::Command("rcon",         bind(&GameClient::RconCmd,     server, _1)));
-  app->shell.command.push_back(Shell::Command("name",         bind(&GameClient::SetName,      server, _1)));
-  app->shell.command.push_back(Shell::Command("team",         bind(&GameClient::SetTeam,      server, _1)));
-  app->shell.command.push_back(Shell::Command("me",           bind(&GameClient::MyEntityName, server, _1)));
-
-  BindMap *binds = screen->binds = new BindMap();
-#if 0                                   
-  binds->Add(Bind('w',             Bind::TimeCB(bind(&Entity::MoveFwd,       screen->camMain, _1))));
-  binds->Add(Bind('s',             Bind::TimeCB(bind(&Entity::MoveRev,       screen->camMain, _1))));
-  binds->Add(Bind('a',             Bind::TimeCB(bind(&Entity::MoveLeft,      screen->camMain, _1))));
-  binds->Add(Bind('d',             Bind::TimeCB(bind(&Entity::MoveRight,     screen->camMain, _1))));
-  binds->Add(Bind('q',             Bind::TimeCB(bind(&Entity::MoveDown,      screen->camMain, _1))));
-  binds->Add(Bind('e',             Bind::TimeCB(bind(&Entity::MoveUp,        screen->camMain, _1))));
-#else
-  binds->Add(Bind('w',             Bind::TimeCB(bind(&GameClient::MoveFwd,   server, _1))));
-  binds->Add(Bind('s',             Bind::TimeCB(bind(&GameClient::MoveRev,   server, _1))));
-  binds->Add(Bind('a',             Bind::TimeCB(bind(&GameClient::MoveLeft,  server, _1))));
-  binds->Add(Bind('d',             Bind::TimeCB(bind(&GameClient::MoveRight, server, _1))));
-  binds->Add(Bind('q',             Bind::TimeCB(bind(&GameClient::MoveDown,  server, _1))));
-  binds->Add(Bind('e',             Bind::TimeCB(bind(&GameClient::MoveUp,    server, _1))));
-#endif
-#if !defined(LFL_IPHONE) && !defined(LFL_ANDROID)
-  binds->Add(Bind(Mouse::Button::_1, Bind::TimeCB(bind(&SpaceballClient::MoveBoost, server, _1))));
-#endif
-  binds->Add(Bind(Key::LeftShift,  Bind::TimeCB(bind(&Entity::RollLeft,   screen->cam, _1))));
-  binds->Add(Bind(Key::Space,      Bind::TimeCB(bind(&Entity::RollRight,  screen->cam, _1))));
-  binds->Add(Bind(Key::Tab,        Bind::TimeCB(bind(&GUI::Activate, playerlist))));
-  binds->Add(Bind(Key::F1,         Bind::CB(bind(&GameClient::SetCamera,  server,          vector<string>(1, string("1"))))));
-  binds->Add(Bind(Key::F2,         Bind::CB(bind(&GameClient::SetCamera,  server,          vector<string>(1, string("2"))))));
-  binds->Add(Bind(Key::F3,         Bind::CB(bind(&GameClient::SetCamera,  server,          vector<string>(1, string("3"))))));
-  binds->Add(Bind(Key::F4,         Bind::CB(bind(&GameClient::SetCamera,  server,          vector<string>(1, string("4"))))));
-  binds->Add(Bind(Key::Return,     Bind::CB(bind(&Shell::grabmode,        &app->shell,     vector<string>()))));
-  binds->Add(Bind('r',             Bind::CB(bind(&MySwitchPlayerCmd,                       vector<string>())))); 
-  binds->Add(Bind('t',             Bind::CB(bind([=](){ chat->ToggleActive(); }))));
-  binds->Add(Bind(Key::Escape,     Bind::CB(bind([=](){ menubar->ToggleActive(); }))));
-  binds->Add(Bind(Key::Backquote,  Bind::CB(bind([=](){ if (!menubar->active) app->shell.console(vector<string>()); }))));
-  binds->Add(Bind(Key::Quote,      Bind::CB(bind([=](){ if (!menubar->active) app->shell.console(vector<string>()); }))));
-
-  // start our engine
+  app->PlayBackgroundMusic(my_app->soundasset("music"));
   return app->Main();
 }

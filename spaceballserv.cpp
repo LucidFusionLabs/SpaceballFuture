@@ -67,14 +67,14 @@ int SpaceballServer(int argc, const char **argv) {
   Asset::Load(&assets);
 
   HTTPServer httpd(FLAGS_port, false);
-  if (app->network->Enable(&httpd)) return -1;
+  if (app->net->Enable(&httpd)) return -1;
   httpd.AddURL("/favicon.ico", new HTTPServer::FileResource("./assets/icon.ico", "image/x-icon"));
   httpd.AddURL("/", new SpaceballStatusServer());
 
   // server = new SpaceballServer(FLAGS_name, FLAGS_port, FLAGS_framerate, &assets);
   if (!FLAGS_rconpw.empty()) server->rcon_auth_passwd = FLAGS_rconpw;
   if (!FLAGS_master.empty()) server->master_sink_url = FLAGS_master;
-  if (app->network->Enable(server->udp_transport)) return -1;
+  if (app->net->Enable(server->udp_transport)) return -1;
 
   INFO("Spaceball 6006 server initialized");
   return app->Main();
@@ -92,8 +92,8 @@ extern "C" int main(int argc, const char **argv) {
   if (argc>1) open_console = 1;
 #endif
 
-  if (app->Create(argc, argv, __FILE__)) { ERROR("lfapp init failed: ", strerror(errno)); return app->Free(); }
-  if (app->Init())                       { ERROR("lfapp open failed: ", strerror(errno)); return app->Free(); }
+  if (app->Create(argc, argv, __FILE__)) return -1;
+  if (app->Init())                       return -1;
 
   bool exit=0;
 #ifdef _WIN32
@@ -101,7 +101,7 @@ extern "C" int main(int argc, const char **argv) {
   if (uninstall) { NTService::Uninstall(service_name); exit=1; }
 #endif
   if (FLAGS_run_server) { return ::SpaceballServer(argc, argv); }
-  if (exit) return app->Free();
+  if (exit) return -1;
 
   return NTService::WrapMain(service_name, ::SpaceballServer, argc, argv);
 }

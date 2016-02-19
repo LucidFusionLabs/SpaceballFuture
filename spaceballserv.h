@@ -71,33 +71,24 @@ struct SpaceballTeam {
   static vector<SpaceballTeam> *GetList() {
     static vector<SpaceballTeam> ret;
     if (ret.size()) return &ret;
-    ret.push_back(SpaceballTeam("adama",      "sky19", 0,  Color("2E5B4B"), Color("4F4FD9"), Color("7373D9"), v4(  -0.20,  -1.00,   -0.40, 1), Color::white, true));
-    ret.push_back(SpaceballTeam("sophia",     "sky36", 13, Color("66BCCD"), Color("3F92D2"), Color("66A3D2"), v4(  12.02,  83.63, -181.28, 1), Color::white, false));
-    ret.push_back(SpaceballTeam("muria",      "sky33", 11, Color("6DAA66"), Color("FF7640"), Color("FF9B73"), v4( 166.48,  60.36,  -92.94, 1), Color::white, true));
-    ret.push_back(SpaceballTeam("leonis",     "sky24", 3,  Color("66CDAA"), Color("DAFB3F"), Color("E3FB71"), v4( 138.29,  71.82,  125.36, 1), Color::white, true));
-    ret.push_back(SpaceballTeam("aquaria",    "sky25", 4,  Color("3F7E68"), Color("36D792"), Color("61D7A4"), v4( 170.57,  90.23,  -52.54, 1), Color::white, false));
-    ret.push_back(SpaceballTeam("tauron",     "sky32", 10, Color("2E5B4B"), Color("FFDE40"), Color("FFE773"), v4(  22.83, 194.83,  -38.93, 1), Color::white, false));
-    ret.push_back(SpaceballTeam("libran",     "sky28", 7,  Color("3F7E68"), Color("9F3ED5"), Color("AD66D5"), v4(  44.18, 192.25,  -32.93, 1), Color::white, true));
-    ret.push_back(SpaceballTeam("canceron",   "sky21", 1,  Color("4A947A"), Color("FF9640"), Color("FFB273"), v4(   2.22,  49.60, -193.73, 1), Color::white, false));
-    ret.push_back(SpaceballTeam("newearth",   "sky23", 2,  Color("57AE64"), Color("39E639"), Color("67E667"), v4( -58.98,  54.04, -183.30, 1), Color::white, true));
-    ret.push_back(SpaceballTeam("picon",      "sky37", 14, Color("3F7E48"), Color("8EF13C"), Color("A9F16C"), v4(-130.15, 127.39,  -82.63, 1), Color::white, false));
-    ret.push_back(SpaceballTeam("virgon",     "sky29", 8,  Color("57AE90"), Color("33CCCC"), Color("5CCCCC"), v4(-138.87,  18.72,  142.70, 1), Color::white, true));
-    ret.push_back(SpaceballTeam("gemenon",    "sky27", 6,  Color("57AE64"), Color("6A48D7"), Color("876ED7"), v4( -29.48, 112.59,  162.64, 1), Color::white, false));
-    ret.push_back(SpaceballTeam("caprica",    "sky38", 15, Color("57AE90"), Color("D235D2"), Color("D25FD2"), v4(-172.27, 101.14,   -9.65, 1), Color::white, true));
-    ret.push_back(SpaceballTeam("aerilon",    "sky31", 9,  Color("66CD76"), Color("FF4040"), Color("FF7373"), v4(   3.08,  51.37,  193.26, 1), Color::white, true));
-    ret.push_back(SpaceballTeam("sagittaron", "sky26", 5,  Color("4A9455"), Color("F13C73"), Color("F16D95"), v4(  42.01,  94.75, -171.04, 1), Color::white, false));
-    ret.push_back(SpaceballTeam("scorpia",    "sky34", 12, Color("66CD76"), Color("FFAD40"), Color("FFC373"), v4(-185.35,  59.88,  -45.35, 1), Color::white, true));
+    ret.emplace_back("adama",      "sky19", 0,  Color("2E5B4B"), Color("4F4FD9"), Color("7373D9"), v4(  -0.20,  -1.00,   -0.40, 1), Color::white, true);
+    ret.emplace_back("sophia",     "sky36", 13, Color("66BCCD"), Color("3F92D2"), Color("66A3D2"), v4(  12.02,  83.63, -181.28, 1), Color::white, false);
+    ret.emplace_back("muria",      "sky33", 11, Color("6DAA66"), Color("FF7640"), Color("FF9B73"), v4( 166.48,  60.36,  -92.94, 1), Color::white, true);
+    ret.emplace_back("leonis",     "sky24", 3,  Color("66CDAA"), Color("DAFB3F"), Color("E3FB71"), v4( 138.29,  71.82,  125.36, 1), Color::white, true);
+    ret.emplace_back("aquaria",    "sky25", 4,  Color("3F7E68"), Color("36D792"), Color("61D7A4"), v4( 170.57,  90.23,  -52.54, 1), Color::white, false);
+    ret.emplace_back("tauron",     "sky32", 10, Color("2E5B4B"), Color("FFDE40"), Color("FFE773"), v4(  22.83, 194.83,  -38.93, 1), Color::white, false);
+    ret.emplace_back("libran",     "sky28", 7,  Color("3F7E68"), Color("9F3ED5"), Color("AD66D5"), v4(  44.18, 192.25,  -32.93, 1), Color::white, true);
+    ret.emplace_back("canceron",   "sky21", 1,  Color("4A947A"), Color("FF9640"), Color("FFB273"), v4(   2.22,  49.60, -193.73, 1), Color::white, false);
+    ret.emplace_back("newearth",   "sky23", 2,  Color("57AE64"), Color("39E639"), Color("67E667"), v4( -58.98,  54.04, -183.30, 1), Color::white, true);
+    ret.emplace_back("picon",      "sky37", 14, Color("3F7E48"), Color("8EF13C"), Color("A9F16C"), v4(-130.15, 127.39,  -82.63, 1), Color::white, false);
+    ret.emplace_back("virgon",     "sky29", 8,  Color("57AE90"), Color("33CCCC"), Color("5CCCCC"), v4(-138.87,  18.72,  142.70, 1), Color::white, true);
+    ret.emplace_back("gemenon",    "sky27", 6,  Color("57AE64"), Color("6A48D7"), Color("876ED7"), v4( -29.48, 112.59,  162.64, 1), Color::white, false);
+    ret.emplace_back("caprica",    "sky38", 15, Color("57AE90"), Color("D235D2"), Color("D25FD2"), v4(-172.27, 101.14,   -9.65, 1), Color::white, true);
+    ret.emplace_back("aerilon",    "sky31", 9,  Color("66CD76"), Color("FF4040"), Color("FF7373"), v4(   3.08,  51.37,  193.26, 1), Color::white, true);
+    ret.emplace_back("sagittaron", "sky26", 5,  Color("4A9455"), Color("F13C73"), Color("F16D95"), v4(  42.01,  94.75, -171.04, 1), Color::white, false);
+    ret.emplace_back("scorpia",    "sky34", 12, Color("66CD76"), Color("FFAD40"), Color("FFC373"), v4(-185.35,  59.88,  -45.35, 1), Color::white, true);
     return &ret;
   }
-};
-
-struct SpaceballMap : public MapAsset {
-  SpaceballTeam *home, *away;
-  SpaceballMap() : home(0), away(0) {}
-  Skybox skybox;
-  Asset *SkyboxAsset() { return skybox.asset(); }
-  void Draw(const Entity &camera);
-  void Load(const string &home_name, const string &away_name);
 };
 
 struct SpaceballGame : public Game {
@@ -237,7 +228,7 @@ struct SpaceballGame : public Game {
   void AssignShipColor(Ship *ship, SpaceballTeam *team) {
     const Scene::EntityVector &other_ships = scene->asset[ship->asset->name];
     vector<Color> other_ship_colors, remaining_colors;
-    for (Scene::EntityVector::const_iterator i = other_ships.begin(); i != other_ships.end(); ++i) other_ship_colors.push_back(((Ship*)*i)->color1);
+    for (auto &i : other_ships) other_ship_colors.push_back(static_cast<const Ship*>(i)->color1);
     sort(other_ship_colors.begin(), other_ship_colors.end());
     set_difference(&team->stripe_colors[0], &team->stripe_colors[sizeofarray(team->stripe_colors)],
                    other_ship_colors.begin(), other_ship_colors.end(), inserter(remaining_colors, remaining_colors.begin()));
@@ -281,13 +272,13 @@ struct SpaceballGame : public Game {
     return ret;
   }
 
-  Entity *NewSpectator(EntityID id, int team) { return Add(id, new Ship(app->shell.asset("ship"), 0, v3(), v3(0,0,1), v3(0,1,0), 0)); }
+  Entity *NewSpectator(EntityID id, int team) { return Add(id, new Ship(screen->shell->asset("ship"), 0, v3(), v3(0,0,1), v3(0,1,0), 0)); }
   Entity *NewShip(EntityID id, int team) {
     bool red = team == Team::Home;
     v3 ort = StartOrientation(team);
     v3 pos = StartPosition(team, &red_startindex, &blue_startindex);
     void *body = physics->AddBox(Ship::radius(), pos, ort, Ship::mass(), Physics::CollidesWith(ShipBit, BallBit));
-    Ship *ship = new Ship(app->shell.asset(red ? "shipred" : "shipblue"), body, pos, ort, v3(0,1,0), StartPositions::get()->blue[0].y);
+    Ship *ship = new Ship(screen->shell->asset(red ? "shipred" : "shipblue"), body, pos, ort, v3(0,1,0), StartPositions::get()->blue[0].y);
     AssignShipColor(ship, red ? home : away);
     Entity *ret = Add(id, ship);
     physics->SetContinuous(ret, .001, Ship::radius().z - .001);
@@ -297,7 +288,7 @@ struct SpaceballGame : public Game {
   Entity *NewBall(EntityID id) {
     void *body = physics->AddSphere(Ball::radius(), Ball::start_pos(), v3(0,0,1), Ball::mass(),
                                     Physics::CollidesWith(BallBit, WallBit|ShipBit));
-    Entity *ret = Add(id, new Ball(app->shell.asset("ball"), body, Ball::start_pos(), v3(0,0,1)));
+    Entity *ret = Add(id, new Ball(screen->shell->asset("ball"), body, Ball::start_pos(), v3(0,0,1)));
     physics->SetContinuous(ret, .001, Ball::radius() - .001);
     return ret;
   }
@@ -317,7 +308,7 @@ struct SpaceballGame : public Game {
       if (!ball && a.first != "shipred" && a.first != "shipblue") continue;
       for (auto e : a.second) {
         if (ball) { ResetBall(e, goal); continue; }
-        Game::ConnectionData *cd = (Game::ConnectionData*)e->userdata;
+        Game::ConnectionData *cd = FromVoid<Game::ConnectionData*>(e->userdata);
         if (cd->team == goal) cd->score += points;
         e->ort = StartOrientation(cd->team);
         e->pos = StartPosition(cd->team, &red_startindex, &blue_startindex);
@@ -350,7 +341,7 @@ struct SpaceballGame : public Game {
     for (auto const &a : scene->asset)
       for (auto e : a.second) {
         if (SpaceballGame::IsShipAssetName(a.first)) {
-          Ship *ship = (Ship*)e;
+          Ship *ship = static_cast<Ship*>(e);
           Game::Controller but(e->buttons);
 
           float boost = min(1000.0f, ship->val_boost(&but));
@@ -372,7 +363,7 @@ struct SpaceballGame : public Game {
           else physics->Input(e, timestep, true);
         }
         else if (a.first == "ball") {
-          ball = (Ball*)e;
+          ball = static_cast<Ball*>(e);
           for (int k=0; k<planes.size(); k++) {
             float distance = planes[k].Distance(e->pos);
             if (distance > 0) continue;
@@ -401,7 +392,7 @@ struct SpaceballGame : public Game {
       EntityID scorer_id = red ? ball->last_collided_with_red : ball->last_collided_with_blue;
       Entity *scorer = Get(scorer_id);
       if (scorer) {
-        Game::ConnectionData *cd = (Game::ConnectionData*)scorer->userdata;
+        Game::ConnectionData *cd = FromVoid<Game::ConnectionData*>(scorer->userdata);
         scoredby = cd->playerName;
         cd->score += 10;
       }
@@ -452,11 +443,12 @@ struct SpaceballGame : public Game {
   }
 
   void CollidedCB(const Entity *e1, const Entity *e2, int n, Physics::Contact *pt) {
-    Ship *s=0; Ball *b=0;
-    if (IsShip(e1)) s = (Ship*)e1;
-    if (IsShip(e2)) s = (Ship*)e2;
-    if (IsBall(e1)) b = (Ball*)e1;
-    if (IsBall(e2)) b = (Ball*)e2;
+    Ball *b=0;
+    const Ship *s=0;
+    if (IsShip(e1)) s = static_cast<const Ship*>(e1);
+    if (IsShip(e2)) s = static_cast<const Ship*>(e2);
+    if (IsBall(e1)) b = const_cast<Ball*>(static_cast<const Ball*>(e1));
+    if (IsBall(e2)) b = const_cast<Ball*>(static_cast<const Ball*>(e2));
     if (!s || !b) return;
 
     b->last_collided_with = GetID(s);
@@ -605,7 +597,7 @@ struct SpaceballBots : public GameBots {
         if (!red && !blue) continue;
 
         Team *team = red ? &redteam : &blueteam, *opponent = red ? &blueteam : &redteam;
-        team->players.push_back(Player(e, (Game::ConnectionData*)e->userdata,
+        team->players.push_back(Player(e, FromVoid<Game::ConnectionData*>(e->userdata),
                                        v3::Dist2(e->pos, team->goal_center),
                                        v3::Dist2(e->pos, opponent->goal_center)));
       }
@@ -724,7 +716,7 @@ struct SpaceballBots : public GameBots {
   }
 
   bool Shoot(Bot *b, Entity *ball, v3 goal_center, Game::Controller *buttons) {
-    SpaceballGame *spaceball = (SpaceballGame*)world;
+    SpaceballGame *spaceball = static_cast<SpaceballGame*>(world);
     v3 targ = goal_center;
     targ.x += fabs(spaceball->goal_max_x - spaceball->goal_min_x) / 2 * Rand(-1.0, 1.0);
     b->entity->ort = targ - b->entity->pos;
@@ -748,8 +740,8 @@ struct SpaceballServer : public GameServer {
   GameUDPServer *udp_transport;
   GPlusServer *gplus_transport;
 
-  SpaceballGame *World() { return (SpaceballGame*)world; }
-  SpaceballBots *Bots() { return (SpaceballBots*)bots; }
+  SpaceballGame *World() { return static_cast<SpaceballGame*>(world); }
+  SpaceballBots *Bots() { return static_cast<SpaceballBots*>(bots); }
   SpaceballServer(const string &name, int port, int framerate, const vector<Asset> *assets)
     : GameServer(new SpaceballGame(&scene), 1000/framerate, name, StrCat(port), assets)
   {
@@ -783,7 +775,7 @@ struct SpaceballServer : public GameServer {
 
         swap(old_player_entity->type, nearest->type);
         swap(old_player_entity->userdata, nearest->userdata);
-        ((Game::ConnectionData*)old_player_entity->userdata)->entityID = cd->entityID;
+        FromVoid<Game::ConnectionData*>(old_player_entity->userdata)->entityID = cd->entityID;
         bots->bots[i].entity = old_player_entity;
         cd->entityID = Game::GetID(nearest);
 
