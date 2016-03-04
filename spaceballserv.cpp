@@ -16,14 +16,14 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "lfapp/lfapp.h"
-#include "lfapp/dom.h"
-#include "lfapp/css.h"
-#include "lfapp/flow.h"
-#include "lfapp/gui.h"
-#include "lfapp/ipc.h"
-#include "lfapp/browser.h"
-#include "lfapp/game.h"
+#include "core/app/app.h"
+#include "core/web/dom.h"
+#include "core/web/css.h"
+#include "core/app/flow.h"
+#include "core/app/gui.h"
+#include "core/app/ipc.h"
+#include "core/app/browser.h"
+#include "core/game/game.h"
 #include "spaceballserv.h"
 
 namespace LFL {

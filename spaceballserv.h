@@ -308,7 +308,7 @@ struct SpaceballGame : public Game {
       if (!ball && a.first != "shipred" && a.first != "shipblue") continue;
       for (auto e : a.second) {
         if (ball) { ResetBall(e, goal); continue; }
-        Game::ConnectionData *cd = FromVoid<Game::ConnectionData*>(e->userdata);
+        Game::ConnectionData *cd = static_cast<Game::ConnectionData*>(e->userdata);
         if (cd->team == goal) cd->score += points;
         e->ort = StartOrientation(cd->team);
         e->pos = StartPosition(cd->team, &red_startindex, &blue_startindex);
@@ -392,7 +392,7 @@ struct SpaceballGame : public Game {
       EntityID scorer_id = red ? ball->last_collided_with_red : ball->last_collided_with_blue;
       Entity *scorer = Get(scorer_id);
       if (scorer) {
-        Game::ConnectionData *cd = FromVoid<Game::ConnectionData*>(scorer->userdata);
+        Game::ConnectionData *cd = static_cast<Game::ConnectionData*>(scorer->userdata);
         scoredby = cd->playerName;
         cd->score += 10;
       }
@@ -597,7 +597,7 @@ struct SpaceballBots : public GameBots {
         if (!red && !blue) continue;
 
         Team *team = red ? &redteam : &blueteam, *opponent = red ? &blueteam : &redteam;
-        team->players.push_back(Player(e, FromVoid<Game::ConnectionData*>(e->userdata),
+        team->players.push_back(Player(e, static_cast<Game::ConnectionData*>(e->userdata),
                                        v3::Dist2(e->pos, team->goal_center),
                                        v3::Dist2(e->pos, opponent->goal_center)));
       }
@@ -775,7 +775,7 @@ struct SpaceballServer : public GameServer {
 
         swap(old_player_entity->type, nearest->type);
         swap(old_player_entity->userdata, nearest->userdata);
-        FromVoid<Game::ConnectionData*>(old_player_entity->userdata)->entityID = cd->entityID;
+        static_cast<Game::ConnectionData*>(old_player_entity->userdata)->entityID = cd->entityID;
         bots->bots[i].entity = old_player_entity;
         cd->entityID = Game::GetID(nearest);
 

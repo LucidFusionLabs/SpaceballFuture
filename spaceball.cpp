@@ -16,15 +16,15 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "lfapp/lfapp.h"
-#include "lfapp/video.h"
-#include "lfapp/network.h"
-#include "lfapp/dom.h"
-#include "lfapp/css.h"
-#include "lfapp/flow.h"
-#include "lfapp/gui.h"
-#include "lfapp/browser.h"
-#include "lfapp/game.h"
+#include "core/app/app.h"
+#include "core/app/video.h"
+#include "core/app/network.h"
+#include "core/web/dom.h"
+#include "core/web/css.h"
+#include "core/app/flow.h"
+#include "core/app/gui.h"
+#include "core/app/browser.h"
+#include "core/game/game.h"
 
 #include "spaceballserv.h"
 
@@ -188,7 +188,7 @@ struct SpaceballClient : public GameClient {
   void DelEntityCB(Entity *e) {
     if (!e) return;
     if (ball == e) ball = 0;
-    if (e->particles) delete FromVoid<Thrusters*>(e->particles);
+    if (e->particles) delete static_cast<Thrusters*>(e->particles);
   }
 
   void AnimationChange(Entity *e, int NewID, int NewSeq) {
@@ -250,8 +250,11 @@ struct TeamSelectGUI : public GUI {
   glow_font  (FontDesc(StrCat(FLAGS_default_font, "Glow"), "", 8, Color::white)),
   team_font  (FontDesc("sbmaps")),
   start_button(this, 0, "start", MouseController::CB(bind(&TeamSelectGUI::Start, this))) {
-    start_button.outline = &bright_font->fg;
+    start_button.outline_topleft     = &Color::grey80;
+    start_button.outline_bottomright = &Color::grey40;
+    start_button.solid = &Color::grey60;
     team_buttons.resize(teams->size());
+    home_team = Rand(size_t(0), team_buttons.size());
   }
 
   void SetHomeTeamIndex(int n) { home_team = n; child_box.Clear(); }
@@ -261,7 +264,9 @@ struct TeamSelectGUI : public GUI {
     glShadertoyShaderWindows(MyShader, Color(25, 60, 130, 120), box);
     GUI::Draw();
     screen->gd->SetColor(Color::white);
-    BoxOutline(3).Draw(team_buttons[home_team].GetHitBoxBox());
+    Drawable::Attr attr;
+    attr.line_width = 3;
+    BoxOutline().Draw(team_buttons[home_team].GetHitBoxBox(), &attr);
   }
 
   void Layout() {
@@ -276,6 +281,7 @@ struct TeamSelectGUI : public GUI {
     flow.AppendNewlines(1);
     flow.p.x += px;
     for (int i = 0; i < team_buttons.size(); i++) {
+      team_buttons[i].v_align = VAlign::Bottom;
       team_buttons[i].box = Box(bw, bh);
       team_buttons[i].Layout(&flow, home_team == i ? glow_font : font);
       flow.p.x += sx;
@@ -379,7 +385,10 @@ struct MyGameWindow : public GUI {
     menubar->selected = 1;
     screen->gui.push_back(&menubar->topbar);
     playerlist = screen->AddGUI(make_unique<GamePlayerListGUI>("Spaceball 6006", "Team 1: silver", "Team 2: ontario"));
-    chat = screen->AddGUI(make_unique<GameChatGUI>('t', reinterpret_cast<GameClient**>(&server)));
+
+    // chat = screen->AddGUI(make_unique<GameChatGUI>('t', reinterpret_cast<GameClient**>(&server)));
+    chat = new GameChatGUI('t', reinterpret_cast<GameClient**>(&server));
+    
     team_select = screen->AddGUI(make_unique<TeamSelectGUI>());
 
     world = new SpaceballGame(&scene);
@@ -738,7 +747,7 @@ void MyWindowStart(Window *W) {
   CHECK_EQ(0, W->NewGUI());
   MyGameWindow *game_gui = W->ReplaceGUI(0, make_unique<MyGameWindow>());
   W->frame_cb = bind(&MyGameWindow::Frame, game_gui, _1, _2, _3);
-  if (FLAGS_lfapp_console) W->InitConsole(Callback());
+  if (FLAGS_console) W->InitConsole(Callback());
 
   BindMap *binds = W->AddInputController(make_unique<BindMap>());
 #if 0                                   
@@ -794,8 +803,8 @@ extern "C" void LFAppCreateCB() {
   FLAGS_scale_font_height = 320;
   FLAGS_font_engine = "atlas";
   FLAGS_default_font = "Origicide";
-  FLAGS_default_font_flag = FLAGS_lfapp_console_font_flag = 0;
-  FLAGS_lfapp_audio = FLAGS_lfapp_video = FLAGS_lfapp_input = FLAGS_lfapp_network = FLAGS_lfapp_console = 1;
+  FLAGS_default_font_flag = FLAGS_console_font_flag = 0;
+  FLAGS_lfapp_audio = FLAGS_lfapp_video = FLAGS_lfapp_input = FLAGS_lfapp_network = FLAGS_console = 1;
   FLAGS_depth_buffer_bits = 16;
 #if defined(LFL_ANDROID) || defined(LFL_IPHONE)
   FLAGS_target_fps = 30;
@@ -886,7 +895,7 @@ extern "C" int main(int argc, const char *argv[]) {
   Asset::Copy(ship, shipblue);
   shipred->color = shipblue->color = true;
 
-  app->window_start_cb(screen);
+  app->StartNewWindow(screen);
   MyGameWindow *game_gui = screen->GetOwnGUI<MyGameWindow>(0);
 
   // add reflection to ball
