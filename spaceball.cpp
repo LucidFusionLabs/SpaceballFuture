@@ -47,7 +47,7 @@ struct MyAppState {
   SoundAssetMap soundasset;
   TextureArray caust;
   Shader fadershader, warpshader, explodeshader;
-} *my_app = new MyAppState();
+} *my_app;
 
 Geometry *FieldGeometry(const Color &rg, const Color &bg, const Color &fc) {
   vector<v3> verts, norm;
@@ -254,7 +254,7 @@ struct TeamSelectGUI : public GUI {
     start_button.outline_bottomright = &Color::grey40;
     start_button.solid = &Color::grey60;
     team_buttons.resize(teams->size());
-    home_team = Rand(size_t(0), team_buttons.size());
+    home_team = Rand(size_t(0), team_buttons.size()-1);
   }
 
   void SetHomeTeamIndex(int n) { home_team = n; child_box.Clear(); }
@@ -264,16 +264,22 @@ struct TeamSelectGUI : public GUI {
     glShadertoyShaderWindows(MyShader, Color(25, 60, 130, 120), box);
     GUI::Draw();
     screen->gd->SetColor(Color::white);
-    Drawable::Attr attr;
-    attr.line_width = 3;
-    BoxOutline().Draw(team_buttons[home_team].GetHitBoxBox(), &attr);
+    screen->gd->SetColor(Color::grey20); BoxTopLeftOutline    ().Draw(team_buttons[home_team].GetHitBoxBox());
+    screen->gd->SetColor(Color::grey60); BoxBottomRightOutline().Draw(team_buttons[home_team].GetHitBoxBox());
+    screen->gd->SetColor(Color::grey80); BoxTopLeftOutline    ().Draw(box);
+    screen->gd->SetColor(Color::grey40); BoxBottomRightOutline().Draw(box);
   }
 
   void Layout() {
     CHECK(font.Load() && bright_font.Load() && glow_font.Load() && team_font.Load());
-    for (int i=0; i<team_buttons.size(); i++) team_buttons[i] =
-      Widget::Button(this, team_font->FindGlyph((*teams)[i].font_index), (*teams)[i].name,
-                     MouseController::CB(bind(&TeamSelectGUI::SetHomeTeamIndex, this, i)));
+    for (int i=0; i<team_buttons.size(); i++) {
+      team_buttons[i] =
+        Widget::Button(this, team_font->FindGlyph((*teams)[i].font_index), (*teams)[i].name,
+                       MouseController::CB(bind(&TeamSelectGUI::SetHomeTeamIndex, this, i)));
+      team_buttons[i].outline_w = 1;
+      team_buttons[i].outline_topleft     = &Color::grey60;
+      team_buttons[i].outline_bottomright = &Color::grey20;
+    }
 
     box = screen->Box(.1, .1, .8, .8);
     int bw=box.w*2/13.0, bh=bw, sx=bw/2, px=(box.w - (bw*4 + sx*3))/2;
@@ -797,7 +803,7 @@ void MyWindowStart(Window *W) {
 }; // namespace LFL
 using namespace LFL;
 
-extern "C" void LFAppCreateCB() {
+extern "C" void MyAppCreate() {
   FLAGS_far_plane = 1000;
   FLAGS_soundasset_seconds = 1;
   FLAGS_scale_font_height = 320;
@@ -806,15 +812,15 @@ extern "C" void LFAppCreateCB() {
   FLAGS_default_font_flag = FLAGS_console_font_flag = 0;
   FLAGS_lfapp_audio = FLAGS_lfapp_video = FLAGS_lfapp_input = FLAGS_lfapp_network = FLAGS_console = 1;
   FLAGS_depth_buffer_bits = 16;
+  app = new Application();
+  screen = new Window();
+  my_app = new MyAppState();
 #if defined(LFL_ANDROID) || defined(LFL_IPHONE)
   FLAGS_target_fps = 30;
   screen->SetSize(point(420, 380));
 #else
   FLAGS_target_fps = 50;
   screen->SetSize(point(840, 760));
-#endif
-#ifdef LFL_DEBUG
-  app->logfilename = StrCat(LFAppDownloadDir(), "spaceball.txt");
 #endif
   app->name = "Spaceball";
   app->window_start_cb = MyWindowStart;
@@ -823,9 +829,9 @@ extern "C" void LFAppCreateCB() {
   app->exit_cb = []{ delete my_app; };
 }
 
-extern "C" int main(int argc, const char *argv[]) {
-  if (app->Create(argc, argv, __FILE__, LFAppCreateCB)) return -1;
-  if (app->Init())                                      return -1;
+extern "C" int MyAppMain(int argc, const char* const* argv) {
+  if (app->Create(argc, argv, __FILE__)) return -1;
+  if (app->Init()) return -1;
   INFO("BUILD Version ", "1.02.1");
 
   FontEngine *atlas_engine = app->fonts->atlas_engine.get();
@@ -876,11 +882,11 @@ extern "C" int main(int argc, const char *argv[]) {
   my_app->soundasset.Load();
 
   if (screen->gd->ShaderSupport()) {
-    string fader_shader  = LocalFile::FileContents(StrCat(app->assetdir, "fader.glsl"));
-    string warp_shader = LocalFile::FileContents(StrCat(app->assetdir, "warp.glsl"));
+    string fader_shader  = LocalFile::FileContents(StrCat(app->assetdir, "fader.frag"));
+    string warp_shader = LocalFile::FileContents(StrCat(app->assetdir, "warp.frag"));
     string explode_shader = screen->gd->vertex_shader;
     CHECK(ReplaceString(&explode_shader, "// LFLPositionShaderMarker",
-                        LocalFile::FileContents(StrCat(app->assetdir, "explode.glsl"))));
+                        LocalFile::FileContents(StrCat(app->assetdir, "explode.vert"))));
 
     Shader::Create("fadershader",   screen->gd->vertex_shader, fader_shader,             "",                     &my_app->fadershader);
     Shader::Create("explodeshader", explode_shader,            screen->gd->pixel_shader, ShaderDefines(0,1,1,0), &my_app->explodeshader);

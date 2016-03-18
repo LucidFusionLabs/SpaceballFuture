@@ -55,7 +55,7 @@ struct SpaceballStatusServer : public HTTPServer::Resource {
 
 int Frame(LFL::Window *W, unsigned clicks, int flag) { return server->Frame(); }
 
-int SpaceballServer(int argc, const char **argv) {
+int SpaceballServer(int argc, const char* const* argv) {
   FLAGS_target_fps = FLAGS_framerate;
   screen->frame_cb = Frame;
 
@@ -83,18 +83,21 @@ int SpaceballServer(int argc, const char **argv) {
 }; // namespace LFL;
 using namespace LFL;
 
-extern "C" int main(int argc, const char **argv) {
-  static const char *service_name = "Spaceball 6006 Server";
-  app->logfilename = StrCat(LFAppDownloadDir(), "spaceballserv.txt");
+extern "C" void MyAppCreate() {
   FLAGS_lfapp_camera = FLAGS_lfapp_audio = FLAGS_lfapp_video = FLAGS_lfapp_input = 0;
+  app = new Application();
+  screen = new Window();
+  app->name = "spaceballserv";
+}
 
-#ifdef _WIN32
-  if (argc>1) open_console = 1;
+extern "C" int MyAppMain(int argc, const char* const* argv) {
+#ifdef LFL_WINDOWS
+  if (argc>1) FLAGS_open_console = 1;
 #endif
-
   if (app->Create(argc, argv, __FILE__)) return -1;
-  if (app->Init())                       return -1;
+  if (app->Init()) return -1;
 
+  static const char *service_name = "Spaceball 6006 Server";
   bool exit=0;
 #ifdef _WIN32
   if (install) { NTService::Install(service_name, argv[0]); exit=1; }
