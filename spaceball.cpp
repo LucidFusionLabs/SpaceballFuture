@@ -193,7 +193,7 @@ struct SpaceballClient : public GameClient {
 
   void AnimationChange(Entity *e, int NewID, int NewSeq) {
     static SoundAsset *bounce = my_app->soundasset("bounce");
-    if      (NewID == SpaceballGame::AnimShipBoost) app->PlaySoundEffect(bounce);
+    if      (NewID == SpaceballGame::AnimShipBoost) { if (FLAGS_lfapp_audio) app->PlaySoundEffect(bounce); }
     else if (NewID == SpaceballGame::AnimExplode)   e->animation.Start(&my_app->explodeshader);
   }
 
@@ -322,6 +322,7 @@ struct MyGameWindow : public GUI {
   unsigned fb_tex1=0, fb_tex2=0;
   Time map_started = Now();
   int map_transition=0, map_transition_start=0, caust_ind=0;
+  int transport_protocol=Protocol::UDP;
   bool draw_skybox_only=0;
   FrameBuffer framebuffer;
   Color home_goal_color, away_goal_color;
@@ -442,7 +443,8 @@ struct MyGameWindow : public GUI {
 
 #ifdef LFL_BUILTIN_SERVER
     if (!builtin_server) {
-      builtin_server = new SpaceballServer(StrCat(FLAGS_player_name, "'s server"), FLAGS_default_port, 20, &my_app->asset.vec);
+      builtin_server = new SpaceballServer(StrCat(FLAGS_player_name, "'s server"), 20, &my_app->asset.vec);
+      builtin_server->InitTransport(transport_protocol, FLAGS_default_port);
       builtin_server->bots = new SpaceballBots(builtin_server->world);
       builtin_server->World()->game_finished_cb = bind(&MyGameWindow::HandleGameFinished, this, builtin_server->World());
     }
@@ -549,6 +551,7 @@ struct MyGameWindow : public GUI {
       else                                                                     { server->MoveBoost(0); }
     }
 
+    if (server) server->Frame();
 #ifdef LFL_BUILTIN_SERVER
     if (builtin_server_enabled) builtin_server->Frame();
 #endif
@@ -699,7 +702,7 @@ struct MyGameWindow : public GUI {
   void ServerCmd(const vector<string> &arg) {
     DisableLocalServer();
     if (arg.empty()) { INFO("eg: server 192.168.1.144:", FLAGS_default_port); return; }
-    server->Connect(arg[0], FLAGS_default_port);
+    server->Connect(transport_protocol, arg[0], FLAGS_default_port);
   }
 
   void LocalServerCmd(const vector<string>&) {
@@ -709,7 +712,7 @@ struct MyGameWindow : public GUI {
       team_select->active = false;
     }
     EnableLocalServer(game_type);
-    server->Connect("127.0.0.1", FLAGS_default_port);
+    server->Connect(transport_protocol, "127.0.0.1", FLAGS_default_port);
   }
 
   void GPlusServerCmd(const vector<string> &arg) {
@@ -730,7 +733,7 @@ struct MyGameWindow : public GUI {
     if (arg.empty()) { INFO("eg: gplus_client participant_id"); return; }
     INFO("GPlusClient ", arg[0]);
     // android_gplus_service(app->net->gplus_client.get());
-    // server->connectGPlus(arg[0]);
+    // server->Connect(Protocol::GPLUS, arg[0], 0);
 #endif
   }
 
@@ -876,10 +879,12 @@ extern "C" int MyAppMain(int argc, const char* const* argv) {
   lines->geometry = FieldLines(lines->tex.coord[2], lines->tex.coord[3]);
   my_app->caust.Load("%s%02d.%s", "caust", "png", 32);
 
-  // soundasset.Add(name,  filename,              ringbuf, channels, sample_rate, seconds );
-  my_app->soundasset.Add("music",  "dstsecondballad.mp3", nullptr, 0,        0,           0       );
-  my_app->soundasset.Add("bounce", "scififortyfive.wav",  nullptr, 0,        0,           0       );
-  my_app->soundasset.Load();
+  if (FLAGS_lfapp_audio) {
+    // soundasset.Add(name,  filename,              ringbuf, channels, sample_rate, seconds );
+    my_app->soundasset.Add("music",  "dstsecondballad.mp3", nullptr, 0,        0,           0       );
+    my_app->soundasset.Add("bounce", "scififortyfive.wav",  nullptr, 0,        0,           0       );
+    my_app->soundasset.Load();
+  }
 
   if (screen->gd->ShaderSupport()) {
     string fader_shader  = LocalFile::FileContents(StrCat(app->assetdir, "fader.frag"));
@@ -922,6 +927,6 @@ extern "C" int MyAppMain(int argc, const char* const* argv) {
   credits->emplace_back("Fonts",        "Cpr.Sparhelt", "http://www.facebook.com/pages/Magique-Fonts-Koczman-B%C3%A1lint/110683665690882", "");
   credits->emplace_back("Image format", "Libpng",       "http://www.libpng.org/",          "");
 
-  app->PlayBackgroundMusic(my_app->soundasset("music"));
+  if (FLAGS_lfapp_audio) app->PlayBackgroundMusic(my_app->soundasset("music"));
   return app->Main();
 }

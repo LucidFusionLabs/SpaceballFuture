@@ -191,7 +191,8 @@ struct SpaceballGame : public Game {
   int GoalX(int id, float x) { return (x >= goal_min_x && x <= goal_max_x) ? id : 0; }
 
   SpaceballTeam *home, *away;
-  Time last_scored; int red_startindex, blue_startindex, game_players, game_type, game_limit, game_control;
+  Time last_scored;
+  int red_startindex, blue_startindex, game_players, game_type, game_limit, game_control;
   Callback game_finished_cb;
 
   SpaceballGame(Scene *s) : Game(s), last_scored(0), red_startindex(rand() % PlayersPerTeam), blue_startindex(rand() % PlayersPerTeam), game_players(0), game_type(0), game_limit(0), game_control(0) {
@@ -737,28 +738,11 @@ struct SpaceballBots : public GameBots {
 
 struct SpaceballServer : public GameServer {
   Scene scene;
-  GameUDPServer *udp_transport;
-  GPlusServer *gplus_transport;
+  SpaceballServer(const string &name, int framerate, const vector<Asset> *assets) :
+    GameServer(new SpaceballGame(&scene), 1000/framerate, name, assets) { World()->Init(); }
 
   SpaceballGame *World() { return static_cast<SpaceballGame*>(world); }
   SpaceballBots *Bots() { return static_cast<SpaceballBots*>(bots); }
-  SpaceballServer(const string &name, int port, int framerate, const vector<Asset> *assets)
-    : GameServer(new SpaceballGame(&scene), 1000/framerate, name, StrCat(port), assets)
-  {
-    World()->Init();
-
-    udp_transport = new GameUDPServer(port);
-    udp_transport->game_network = Singleton<Game::UDPNetwork>::Get();
-    udp_transport->handler = this;
-    svc.push_back(udp_transport);
-
-#ifdef LFL_ANDROID
-    gplus_transport = new GPlusServer();
-    gplus_transport->game_network = Singleton<Game::GoogleMultiplayerNetwork>::Get();
-    gplus_transport->handler = this;
-    svc.push_back(gplus_transport);
-#endif
-  }
 
   void RconRequestCB(Connection *c, Game::ConnectionData *cd, const string &cmd, const string &arg) {
     SpaceballGame *world = World();
