@@ -17,13 +17,9 @@
  */
 
 #include "core/app/app.h"
-#include "core/app/video.h"
-#include "core/app/network.h"
-#include "core/web/dom.h"
-#include "core/web/css.h"
-#include "core/app/flow.h"
 #include "core/app/gui.h"
-#include "core/app/browser.h"
+#include "core/app/network.h"
+#include "core/web/browser.h"
 #include "core/game/game.h"
 
 #include "spaceballserv.h"
@@ -304,6 +300,9 @@ struct TeamSelectGUI : public GUI {
 };
 
 struct MyGameWindow : public GUI {
+  const int default_transport_protocol=Protocol::UDP;
+  const int local_transport_protocol=Protocol::UDP;
+  //const int local_transport_protocol=Protocol::InProcess;
 #define LFL_BUILTIN_SERVER
 #ifdef  LFL_BUILTIN_SERVER
   SpaceballServer *builtin_server=0;
@@ -322,7 +321,6 @@ struct MyGameWindow : public GUI {
   unsigned fb_tex1=0, fb_tex2=0;
   Time map_started = Now();
   int map_transition=0, map_transition_start=0, caust_ind=0;
-  int transport_protocol=Protocol::UDP;
   bool draw_skybox_only=0;
   FrameBuffer framebuffer;
   Color home_goal_color, away_goal_color;
@@ -444,9 +442,10 @@ struct MyGameWindow : public GUI {
 #ifdef LFL_BUILTIN_SERVER
     if (!builtin_server) {
       builtin_server = new SpaceballServer(StrCat(FLAGS_player_name, "'s server"), 20, &my_app->asset.vec);
-      builtin_server->InitTransport(transport_protocol, FLAGS_default_port);
       builtin_server->bots = new SpaceballBots(builtin_server->world);
       builtin_server->World()->game_finished_cb = bind(&MyGameWindow::HandleGameFinished, this, builtin_server->World());
+      builtin_server->InitTransport(local_transport_protocol, FLAGS_default_port);
+      if (local_transport_protocol == Protocol::InProcess) server->inprocess_server = builtin_server->inprocess_transport;
     }
 
     if (!builtin_server_enabled) {
@@ -702,7 +701,7 @@ struct MyGameWindow : public GUI {
   void ServerCmd(const vector<string> &arg) {
     DisableLocalServer();
     if (arg.empty()) { INFO("eg: server 192.168.1.144:", FLAGS_default_port); return; }
-    server->Connect(transport_protocol, arg[0], FLAGS_default_port);
+    server->Connect(default_transport_protocol, arg[0], FLAGS_default_port);
   }
 
   void LocalServerCmd(const vector<string>&) {
@@ -712,7 +711,7 @@ struct MyGameWindow : public GUI {
       team_select->active = false;
     }
     EnableLocalServer(game_type);
-    server->Connect(transport_protocol, "127.0.0.1", FLAGS_default_port);
+    server->Connect(local_transport_protocol, "127.0.0.1", FLAGS_default_port);
   }
 
   void GPlusServerCmd(const vector<string> &arg) {
@@ -808,7 +807,7 @@ using namespace LFL;
 
 extern "C" void MyAppCreate() {
   FLAGS_far_plane = 1000;
-  FLAGS_soundasset_seconds = 1;
+  FLAGS_soundasset_seconds = 2;
   FLAGS_scale_font_height = 320;
   FLAGS_font_engine = "atlas";
   FLAGS_default_font = "Origicide";
@@ -881,7 +880,7 @@ extern "C" int MyAppMain(int argc, const char* const* argv) {
 
   if (FLAGS_lfapp_audio) {
     // soundasset.Add(name,  filename,              ringbuf, channels, sample_rate, seconds );
-    my_app->soundasset.Add("music",  "dstsecondballad.mp3", nullptr, 0,        0,           0       );
+    my_app->soundasset.Add("music",  "dstsecondballad.ogg", nullptr, 0,        0,           0       );
     my_app->soundasset.Add("bounce", "scififortyfive.wav",  nullptr, 0,        0,           0       );
     my_app->soundasset.Load();
   }

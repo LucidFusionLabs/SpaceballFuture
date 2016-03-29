@@ -17,12 +17,9 @@
  */
 
 #include "core/app/app.h"
-#include "core/web/dom.h"
-#include "core/web/css.h"
-#include "core/app/flow.h"
 #include "core/app/gui.h"
 #include "core/app/ipc.h"
-#include "core/app/browser.h"
+#include "core/web/browser.h"
 #include "core/game/game.h"
 #include "spaceballserv.h"
 
