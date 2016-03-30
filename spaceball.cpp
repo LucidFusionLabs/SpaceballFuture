@@ -189,7 +189,7 @@ struct SpaceballClient : public GameClient {
 
   void AnimationChange(Entity *e, int NewID, int NewSeq) {
     static SoundAsset *bounce = my_app->soundasset("bounce");
-    if      (NewID == SpaceballGame::AnimShipBoost) { if (FLAGS_lfapp_audio) app->PlaySoundEffect(bounce); }
+    if      (NewID == SpaceballGame::AnimShipBoost) { if (FLAGS_lfapp_audio) app->PlaySoundEffect(bounce, e->pos, e->vel); }
     else if (NewID == SpaceballGame::AnimExplode)   e->animation.Start(&my_app->explodeshader);
   }
 
@@ -301,8 +301,11 @@ struct TeamSelectGUI : public GUI {
 
 struct MyGameWindow : public GUI {
   const int default_transport_protocol=Protocol::UDP;
+#ifdef LFL_EMSCRIPTEN
+  const int local_transport_protocol=Protocol::InProcess;
+#else
   const int local_transport_protocol=Protocol::UDP;
-  //const int local_transport_protocol=Protocol::InProcess;
+#endif
 #define LFL_BUILTIN_SERVER
 #ifdef  LFL_BUILTIN_SERVER
   SpaceballServer *builtin_server=0;
@@ -390,11 +393,11 @@ struct MyGameWindow : public GUI {
     menubar->selected = 1;
     screen->gui.push_back(&menubar->topbar);
     playerlist = screen->AddGUI(make_unique<GamePlayerListGUI>("Spaceball 6006", "Team 1: silver", "Team 2: ontario"));
-
-    // chat = screen->AddGUI(make_unique<GameChatGUI>('t', reinterpret_cast<GameClient**>(&server)));
-    chat = new GameChatGUI('t', reinterpret_cast<GameClient**>(&server));
-    
     team_select = screen->AddGUI(make_unique<TeamSelectGUI>());
+
+    chat = new GameChatGUI('t', reinterpret_cast<GameClient**>(&server));
+    chat->Write("Enter to grab mouse");
+    chat->write_last = Time(0);
 
     world = new SpaceballGame(&scene);
     server = new SpaceballClient(world, playerlist, chat);
@@ -720,8 +723,8 @@ struct MyGameWindow : public GUI {
     EnableLocalServer(SpaceballSettings::TYPE_EMPTYCOURT);
     if (arg.empty()) { INFO("eg: gplus_server participant_id"); return; }
     INFO("GPlusServer ", arg[0]);
-    // android_gplus_service(builtin_server->gplus_transport);
-    // server->connect("127.0.0.1", FLAGS_default_port);
+    AndroidGPlusService(builtin_server->gplus_transport);
+    server->connect("127.0.0.1", FLAGS_default_port);
 #endif
   }
 
@@ -776,8 +779,12 @@ void MyWindowStart(Window *W) {
 #if !defined(LFL_IPHONE) && !defined(LFL_ANDROID)
   binds->Add(Mouse::Button::_1, Bind::TimeCB(bind(&SpaceballClient::MoveBoost, game_gui->server, _1)));
 #endif
+#ifdef LFL_EMSCRIPTEN
+  screen->grabbed_pitch_cb = function<void(int)>();
+#else
   binds->Add(Key::LeftShift,  Bind::TimeCB(bind(&Entity::RollLeft,   W->cam.get(), _1)));
   binds->Add(Key::Space,      Bind::TimeCB(bind(&Entity::RollRight,  W->cam.get(), _1)));
+#endif
   binds->Add(Key::Tab,        Bind::TimeCB(bind(&GUI::Activate, game_gui->playerlist)));
   binds->Add(Key::F1,         Bind::CB(bind(&GameClient::SetCamera,  game_gui->server,  vector<string>(1, string("1")))));
   binds->Add(Key::F2,         Bind::CB(bind(&GameClient::SetCamera,  game_gui->server,  vector<string>(1, string("2")))));
@@ -883,6 +890,9 @@ extern "C" int MyAppMain(int argc, const char* const* argv) {
     my_app->soundasset.Add("music",  "dstsecondballad.ogg", nullptr, 0,        0,           0       );
     my_app->soundasset.Add("bounce", "scififortyfive.wav",  nullptr, 0,        0,           0       );
     my_app->soundasset.Load();
+    auto bounce = my_app->soundasset("bounce");
+    bounce->max_distance = 1000;
+    bounce->reference_distance = SpaceballGame::FieldDefinition::get()->Length() / 3.0;
   }
 
   if (screen->gd->ShaderSupport()) {

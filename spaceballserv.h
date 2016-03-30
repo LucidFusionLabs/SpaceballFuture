@@ -114,6 +114,7 @@ struct SpaceballGame : public Game {
     float HorizontalThird(v3 x) { return 3 * (x.x + C.x) / fabs(B.x - C.x); }
     float VerticalThird(v3 x) { return 3 * (x.z + C.z) / fabs(G.z - C.z); }
     bool RedSide(v3 x) { return x.z < 0; }
+    int Length() { return fabs(A.z) + fabs(E.z); }
   };
 
   struct Goals { static v3 get() { return v3(.15, 1, 1); } };
