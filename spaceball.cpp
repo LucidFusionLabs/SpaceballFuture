@@ -16,7 +16,6 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "core/app/app.h"
 #include "core/app/gui.h"
 #include "core/app/network.h"
 #include "core/web/browser.h"
@@ -98,7 +97,7 @@ Geometry *FieldLines(float tx, float ty) {
 }
 
 void ShipDraw(Asset *a, Entity *e) {
-  static unique_ptr<Geometry> stripes = Geometry::LoadOBJ(StrCat(app->assetdir, "ship_stripes.obj"));
+  static unique_ptr<Geometry> stripes = Geometry::LoadOBJ(unique_ptr<File>(Asset::OpenFile("ship_stripes.obj")).get());
   Scene::Select(stripes.get());
   screen->gd->SetColor(e->color1);
   Scene::Draw(stripes.get(), e);
@@ -123,7 +122,8 @@ void ShipDraw(Asset *a, Entity *e) {
     float lightning_glyph_texcoord[4];
     memcpy(lightning_glyph_texcoord, lightning_glyph->tex.coord, sizeof(lightning_glyph_texcoord));
     lightning_glyph_texcoord[Texture::maxx_coord_ind] *= .1;
-    lightning_obj = Geometry::LoadOBJ(StrCat(app->assetdir, "ship_lightning.obj"), lightning_glyph_texcoord);
+    lightning_obj = Geometry::LoadOBJ(unique_ptr<File>(Asset::OpenFile("ship_lightning.obj")).get(),
+                                      lightning_glyph_texcoord);
   }
   screen->gd->BindTexture(GraphicsDevice::Texture2D, lightning_glyph->tex.ID);
 
@@ -241,9 +241,9 @@ struct TeamSelectGUI : public GUI {
   int home_team=0, away_team=0;
 
   TeamSelectGUI() : teams(SpaceballTeam::GetList()),
-  font       (FontDesc(FLAGS_default_font,                 "", 8, Color::grey80)),
-  bright_font(FontDesc(FLAGS_default_font,                 "", 8, Color::white)),
-  glow_font  (FontDesc(StrCat(FLAGS_default_font, "Glow"), "", 8, Color::white)),
+  font       (FontDesc(FLAGS_font,                 "", 8, Color::grey80)),
+  bright_font(FontDesc(FLAGS_font,                 "", 8, Color::white)),
+  glow_font  (FontDesc(StrCat(FLAGS_font, "Glow"), "", 8, Color::white)),
   team_font  (FontDesc("sbmaps")),
   start_button(this, 0, "start", MouseController::CB(bind(&TeamSelectGUI::Start, this))) {
     start_button.outline_topleft     = &Color::grey80;
@@ -635,7 +635,7 @@ struct MyGameWindow : public GUI {
       goal->tex.Bind();
       win.Draw(goal->tex.coord);
 
-      static Font *font = app->fonts->Get(FLAGS_default_font, "", 16);
+      static Font *font = app->fonts->Get(FLAGS_font, "", 16);
       font->Draw(StrCat(server->last_scored_PlayerName, " scores"),
                  Box(win.x, win.y - screen->height*.1, screen->width*.2, screen->height*.1, false), 
                  0, Font::DrawFlag::AlignCenter | Font::DrawFlag::NoWrap);
@@ -656,7 +656,7 @@ struct MyGameWindow : public GUI {
 
     if (server->gameover.enabled()) {
       Box win(screen->width*.4, screen->height*.9, screen->width*.2, screen->height*.1, false);
-      static Font *font = app->fonts->Get(FLAGS_default_font, "", 16);
+      static Font *font = app->fonts->Get(FLAGS_font, "", 16);
       font->Draw(StrCat(server->gameover.start_ind == SpaceballGame::Team::Home ? home_team->name : away_team->name, " wins"),
                  win, 0, Font::DrawFlag::AlignCenter);
     }
@@ -693,7 +693,7 @@ struct MyGameWindow : public GUI {
     }
 
     screen->gd->EnableBlend();
-    static Font *text = app->fonts->Get(FLAGS_default_font, "", 8);
+    static Font *text = app->fonts->Get(FLAGS_font, "", 8);
     if (FLAGS_draw_fps)   text->Draw(StringPrintf("FPS = %.2f", app->FPS()),           point(screen->width*.05, screen->height*.05));
     if (!menubar->active) text->Draw(intervalminutes(Now() - map_started),             point(screen->width*.93, screen->height*.97));
     if (!menubar->active) text->Draw(StrCat(home_team->name, " vs ", away_team->name), point(screen->width*.01, screen->height*.97));
@@ -724,7 +724,7 @@ struct MyGameWindow : public GUI {
     if (arg.empty()) { INFO("eg: gplus_server participant_id"); return; }
     INFO("GPlusServer ", arg[0]);
     AndroidGPlusService(builtin_server->gplus_transport);
-    server->connect("127.0.0.1", FLAGS_default_port);
+    server->Connect(Protocol::GPLUS, "127.0.0.1", FLAGS_default_port);
 #endif
   }
 
@@ -817,8 +817,8 @@ extern "C" void MyAppCreate() {
   FLAGS_soundasset_seconds = 2;
   FLAGS_scale_font_height = 320;
   FLAGS_font_engine = "atlas";
-  FLAGS_default_font = "Origicide";
-  FLAGS_default_font_flag = FLAGS_console_font_flag = 0;
+  FLAGS_font = FLAGS_console_font = "Origicide";
+  FLAGS_font_flag = FLAGS_console_font_flag = 0;
   FLAGS_lfapp_audio = FLAGS_lfapp_video = FLAGS_lfapp_input = FLAGS_lfapp_network = FLAGS_console = 1;
   FLAGS_depth_buffer_bits = 16;
   app = new Application();
@@ -828,7 +828,7 @@ extern "C" void MyAppCreate() {
   FLAGS_target_fps = 30;
   screen->SetSize(point(420, 380));
 #else
-  FLAGS_target_fps = 50;
+  FLAGS_target_fps = 60;
   screen->SetSize(point(840, 760));
 #endif
   app->name = "Spaceball";
@@ -844,11 +844,11 @@ extern "C" int MyAppMain(int argc, const char* const* argv) {
   INFO("BUILD Version ", "1.02.1");
 
   FontEngine *atlas_engine = app->fonts->atlas_engine.get();
-  atlas_engine->Init(FontDesc("MobileAtlas",                      "",  0, Color::white, Color::clear, 0, false));
-  atlas_engine->Init(FontDesc("dpad_atlas",                       "",  0, Color::white, Color::clear, 0, false));
-  atlas_engine->Init(FontDesc("sbmaps",                           "",  0, Color::white, Color::clear, 0, false));
-  atlas_engine->Init(FontDesc("lightning",                        "",  0, Color::white, Color::clear, 0, false));
-  atlas_engine->Init(FontDesc(StrCat(FLAGS_default_font, "Glow"), "", 32, Color::white, Color::clear, 0, false));
+  atlas_engine->Init(FontDesc("MobileAtlas",              "",  0, Color::white, Color::clear, 0, false));
+  atlas_engine->Init(FontDesc("dpad_atlas",               "",  0, Color::white, Color::clear, 0, false));
+  atlas_engine->Init(FontDesc("sbmaps",                   "",  0, Color::white, Color::clear, 0, false));
+  atlas_engine->Init(FontDesc("lightning",                "",  0, Color::white, Color::clear, 0, false));
+  atlas_engine->Init(FontDesc(StrCat(FLAGS_font, "Glow"), "", 32, Color::white, Color::clear, 0, false));
 
   SettingsFile::Read(LFAppDownloadDir(), "settings");
   Singleton<FlagMap>::Get()->dirty = false;
@@ -896,11 +896,11 @@ extern "C" int MyAppMain(int argc, const char* const* argv) {
   }
 
   if (screen->gd->ShaderSupport()) {
-    string fader_shader  = LocalFile::FileContents(StrCat(app->assetdir, "fader.frag"));
-    string warp_shader = LocalFile::FileContents(StrCat(app->assetdir, "warp.frag"));
+    string fader_shader  = Asset::FileContents("fader.frag");
+    string warp_shader = Asset::FileContents("warp.frag");
     string explode_shader = screen->gd->vertex_shader;
     CHECK(ReplaceString(&explode_shader, "// LFLPositionShaderMarker",
-                        LocalFile::FileContents(StrCat(app->assetdir, "explode.vert"))));
+                        Asset::FileContents("explode.vert")));
 
     Shader::Create("fadershader",   screen->gd->vertex_shader, fader_shader,             "",                     &my_app->fadershader);
     Shader::Create("explodeshader", explode_shader,            screen->gd->pixel_shader, ShaderDefines(0,1,1,0), &my_app->explodeshader);
