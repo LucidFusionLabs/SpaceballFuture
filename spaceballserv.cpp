@@ -80,28 +80,27 @@ int SpaceballServer(int argc, const char* const* argv) {
 }; // namespace LFL;
 using namespace LFL;
 
-extern "C" void MyAppCreate() {
-  FLAGS_lfapp_camera = FLAGS_lfapp_audio = FLAGS_lfapp_video = FLAGS_lfapp_input = 0;
-  app = new Application();
+extern "C" void MyAppCreate(int argc, const char* const* argv) {
+  app = new Application(argc, argv);
   screen = new Window();
   app->name = "spaceballserv";
 }
 
-extern "C" int MyAppMain(int argc, const char* const* argv) {
+extern "C" int MyAppMain() {
 #ifdef LFL_WINDOWS
   if (argc>1) FLAGS_open_console = 1;
 #endif
-  if (app->Create(argc, argv, __FILE__)) return -1;
+  if (app->Create(__FILE__)) return -1;
   if (app->Init()) return -1;
 
   static const char *service_name = "Spaceball 6006 Server";
   bool exit=0;
 #ifdef _WIN32
-  if (install) { NTService::Install(service_name, argv[0]); exit=1; }
+  if (install) { NTService::Install(service_name, app->argv[0]); exit=1; }
   if (uninstall) { NTService::Uninstall(service_name); exit=1; }
 #endif
-  if (FLAGS_run_server) { return ::SpaceballServer(argc, argv); }
+  if (FLAGS_run_server) { return ::SpaceballServer(app->argc, app->argv); }
   if (exit) return -1;
 
-  return NTService::WrapMain(service_name, ::SpaceballServer, argc, argv);
+  return NTService::WrapMain(service_name, ::SpaceballServer, app->argc, app->argv);
 }

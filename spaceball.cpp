@@ -189,7 +189,7 @@ struct SpaceballClient : public GameClient {
 
   void AnimationChange(Entity *e, int NewID, int NewSeq) {
     static SoundAsset *bounce = my_app->soundasset("bounce");
-    if      (NewID == SpaceballGame::AnimShipBoost) { if (FLAGS_lfapp_audio) app->PlaySoundEffect(bounce, e->pos, e->vel); }
+    if      (NewID == SpaceballGame::AnimShipBoost) { if (FLAGS_enable_audio) app->PlaySoundEffect(bounce, e->pos, e->vel); }
     else if (NewID == SpaceballGame::AnimExplode)   e->animation.Start(&my_app->explodeshader);
   }
 
@@ -776,7 +776,7 @@ void MyWindowStart(Window *W) {
   binds->Add('q',             Bind::TimeCB(bind(&GameClient::MoveDown,  game_gui->server, _1)));
   binds->Add('e',             Bind::TimeCB(bind(&GameClient::MoveUp,    game_gui->server, _1)));
 #endif
-#if !defined(LFL_IPHONE) && !defined(LFL_ANDROID)
+#ifndef LFL_MOBILE
   binds->Add(Mouse::Button::_1, Bind::TimeCB(bind(&SpaceballClient::MoveBoost, game_gui->server, _1)));
 #endif
 #ifdef LFL_EMSCRIPTEN
@@ -812,19 +812,19 @@ void MyWindowStart(Window *W) {
 }; // namespace LFL
 using namespace LFL;
 
-extern "C" void MyAppCreate() {
+extern "C" void MyAppCreate(int argc, const char* const* argv) {
   FLAGS_far_plane = 1000;
   FLAGS_soundasset_seconds = 2;
   FLAGS_scale_font_height = 320;
   FLAGS_font_engine = "atlas";
   FLAGS_font = FLAGS_console_font = "Origicide";
   FLAGS_font_flag = FLAGS_console_font_flag = 0;
-  FLAGS_lfapp_audio = FLAGS_lfapp_video = FLAGS_lfapp_input = FLAGS_lfapp_network = FLAGS_console = 1;
+  FLAGS_enable_audio = FLAGS_enable_video = FLAGS_enable_input = FLAGS_enable_network = FLAGS_console = 1;
   FLAGS_depth_buffer_bits = 16;
-  app = new Application();
+  app = new Application(argc, argv);
   screen = new Window();
   my_app = new MyAppState();
-#if defined(LFL_ANDROID) || defined(LFL_IPHONE)
+#ifdef LFL_MOBILE
   FLAGS_target_fps = 30;
   screen->SetSize(point(420, 380));
 #else
@@ -838,8 +838,8 @@ extern "C" void MyAppCreate() {
   app->exit_cb = []{ delete my_app; };
 }
 
-extern "C" int MyAppMain(int argc, const char* const* argv) {
-  if (app->Create(argc, argv, __FILE__)) return -1;
+extern "C" int MyAppMain() {
+  if (app->Create(__FILE__)) return -1;
   if (app->Init()) return -1;
   INFO("BUILD Version ", "1.02.1");
 
@@ -885,7 +885,7 @@ extern "C" int MyAppMain(int argc, const char* const* argv) {
   lines->geometry = FieldLines(lines->tex.coord[2], lines->tex.coord[3]);
   my_app->caust.Load("%s%02d.%s", "caust", "png", 32);
 
-  if (FLAGS_lfapp_audio) {
+  if (FLAGS_enable_audio) {
     // soundasset.Add(name,  filename,              ringbuf, channels, sample_rate, seconds );
     my_app->soundasset.Add("music",  "dstsecondballad.ogg", nullptr, 0,        0,           0       );
     my_app->soundasset.Add("bounce", "scififortyfive.wav",  nullptr, 0,        0,           0       );
@@ -936,6 +936,6 @@ extern "C" int MyAppMain(int argc, const char* const* argv) {
   credits->emplace_back("Fonts",        "Cpr.Sparhelt", "http://www.facebook.com/pages/Magique-Fonts-Koczman-B%C3%A1lint/110683665690882", "");
   credits->emplace_back("Image format", "Libpng",       "http://www.libpng.org/",          "");
 
-  if (FLAGS_lfapp_audio) app->PlayBackgroundMusic(my_app->soundasset("music"));
+  if (FLAGS_enable_audio) app->PlayBackgroundMusic(my_app->soundasset("music"));
   return app->Main();
 }
