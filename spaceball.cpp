@@ -96,21 +96,21 @@ Geometry *FieldLines(float tx, float ty) {
   return new Geometry(GraphicsDevice::Triangles, verts.size(), &verts[0], 0, &tex[0], NullPointer<Color>());
 }
 
-void ShipDraw(Asset *a, Entity *e) {
+void ShipDraw(GraphicsDevice *gd, Asset *a, Entity *e) {
   static unique_ptr<Geometry> stripes = Geometry::LoadOBJ(unique_ptr<File>(Asset::OpenFile("ship_stripes.obj")).get());
-  Scene::Select(stripes.get());
-  screen->gd->SetColor(e->color1);
-  Scene::Draw(stripes.get(), e);
+  Scene::Select(gd, stripes.get());
+  gd->SetColor(e->color1);
+  Scene::Draw(gd, stripes.get(), e);
 
-  Scene::Select(a);
+  Scene::Select(gd, a);
   Shader *anim_shader = 0;
   if (e->animation.ShaderActive()) {
     anim_shader = e->animation.shader;
-    screen->gd->UseShader(anim_shader);
+    gd->UseShader(anim_shader);
     anim_shader->SetUniform1f("time", e->animation.Percent());
   }
-  Scene::Draw(a->geometry, e);
-  if (anim_shader) screen->gd->UseShader(0);
+  Scene::Draw(gd, a->geometry, e);
+  if (anim_shader) gd->UseShader(0);
 
   static Timer lightning_timer;
   static float last_lightning_offset = 0;
@@ -125,7 +125,7 @@ void ShipDraw(Asset *a, Entity *e) {
     lightning_obj = Geometry::LoadOBJ(unique_ptr<File>(Asset::OpenFile("ship_lightning.obj")).get(),
                                       lightning_glyph_texcoord);
   }
-  screen->gd->BindTexture(GraphicsDevice::Texture2D, lightning_glyph->tex.ID);
+  gd->BindTexture(GraphicsDevice::Texture2D, lightning_glyph->tex.ID);
 
   float lightning_offset = (e->namehash % 11) / 10.0;
   lightning_obj->ScrollTexCoord(-.4 * ToFSeconds(lightning_timer.GetTime(true)).count(),
@@ -133,19 +133,19 @@ void ShipDraw(Asset *a, Entity *e) {
                                 &lightning_texcoord_min_int_x);
   last_lightning_offset = lightning_offset;
 
-  Scene::Select(lightning_obj.get());
-  screen->gd->EnableBlend();
+  Scene::Select(gd, lightning_obj.get());
+  gd->EnableBlend();
   Color c = e->color1;
   c.scale(2.0);
-  screen->gd->SetColor(c);
-  Scene::Draw(lightning_obj.get(), e);
+  gd->SetColor(c);
+  Scene::Draw(gd, lightning_obj.get(), e);
 }
 
-void SetInitialCameraPosition() {
+void SetInitialCameraPosition(Entity *cam) {
   // position camera for a nice earth shot; from command 'campos'
-  screen->cam->pos = v3(5.54,1.70,4.39);
-  screen->cam->ort = v3(-0.14,0.02,-0.69);
-  screen->cam->up = v3(0.01,1.00,0.02);
+  cam->pos = v3(5.54,1.70,4.39);
+  cam->ort = v3(-0.14,0.02,-0.69);
+  cam->up = v3(0.01,1.00,0.02);
 }
 
 struct SpaceballClient : public GameClient {
@@ -206,17 +206,18 @@ struct SpaceballClient : public GameClient {
       replay.while_seq = last.seq_WorldUpdate = seq;
       replay.start = Now();
 
-      screen->cam->pos = v3(1.73,   2.53, 16.83);
-      screen->cam->up  = v3(-0.01,  0.98, -0.19);
-      screen->cam->ort = v3(-0.03, -0.13, -0.69);
+      Entity *cam = &world->scene->cam;
+      cam->pos = v3(1.73,   2.53, 16.83);
+      cam->up  = v3(-0.01,  0.98, -0.19);
+      cam->ort = v3(-0.03, -0.13, -0.69);
 
       if (last_scored_team == Game::Team::Blue) {
-        screen->cam->pos.z *= -1;
-        screen->cam->ort.z *= -1;
-        screen->cam->up.z *= -1;
+        cam->pos.z *= -1;
+        cam->ort.z *= -1;
+        cam->up.z *= -1;
       }
-      screen->cam->ort.Norm();
-      screen->cam->up.Norm();
+      cam->ort.Norm();
+      cam->up.Norm();
     }
     else if (cmd == "win") {
       gameover.start_ind = atoi(arg);
@@ -240,7 +241,7 @@ struct TeamSelectGUI : public GUI {
   vector<Widget::Button> team_buttons;
   int home_team=0, away_team=0;
 
-  TeamSelectGUI() : teams(SpaceballTeam::GetList()),
+  TeamSelectGUI(Window *W) : GUI(W), teams(SpaceballTeam::GetList()),
   font       (FontDesc(FLAGS_font,                 "", 8, Color::grey80)),
   bright_font(FontDesc(FLAGS_font,                 "", 8, Color::white)),
   glow_font  (FontDesc(StrCat(FLAGS_font, "Glow"), "", 8, Color::white)),
@@ -257,13 +258,14 @@ struct TeamSelectGUI : public GUI {
   void Start() { ShellRun("local_server"); }
 
   void Draw(Shader *MyShader) {
-    glShadertoyShaderWindows(MyShader, Color(25, 60, 130, 120), box);
+    GraphicsContext gc(root->gd);
+    glShadertoyShaderWindows(gc.gd, MyShader, Color(25, 60, 130, 120), box);
     GUI::Draw();
-    screen->gd->SetColor(Color::white);
-    screen->gd->SetColor(Color::grey20); BoxTopLeftOutline    ().Draw(team_buttons[home_team].GetHitBoxBox());
-    screen->gd->SetColor(Color::grey60); BoxBottomRightOutline().Draw(team_buttons[home_team].GetHitBoxBox());
-    screen->gd->SetColor(Color::grey80); BoxTopLeftOutline    ().Draw(box);
-    screen->gd->SetColor(Color::grey40); BoxBottomRightOutline().Draw(box);
+    gc.gd->SetColor(Color::white);
+    gc.gd->SetColor(Color::grey20); BoxTopLeftOutline    ().Draw(&gc, team_buttons[home_team].GetHitBoxBox());
+    gc.gd->SetColor(Color::grey60); BoxBottomRightOutline().Draw(&gc, team_buttons[home_team].GetHitBoxBox());
+    gc.gd->SetColor(Color::grey80); BoxTopLeftOutline    ().Draw(&gc, box);
+    gc.gd->SetColor(Color::grey40); BoxBottomRightOutline().Draw(&gc, box);
   }
 
   void Layout() {
@@ -277,9 +279,9 @@ struct TeamSelectGUI : public GUI {
       team_buttons[i].outline_bottomright = &Color::grey20;
     }
 
-    box = screen->Box(.1, .1, .8, .8);
+    box = root->Box(.1, .1, .8, .8);
     int bw=box.w*2/13.0, bh=bw, sx=bw/2, px=(box.w - (bw*4 + sx*3))/2;
-    Flow flow(&box, font, Reset());
+    Flow flow(&box, font, ResetGUI());
     flow.AppendNewlines(1);
     flow.p.x += px;
     for (int i = 0; i < team_buttons.size(); i++) {
@@ -293,7 +295,7 @@ struct TeamSelectGUI : public GUI {
       if (i+1 < team_buttons.size()) flow.p.x += px;
     }
     flow.layout.align_center = 1;
-    start_button.box = screen->Box(.4, .05);
+    start_button.box = root->Box(.4, .05);
     start_button.Layout(&flow, bright_font);
     flow.Complete();
   }
@@ -336,7 +338,7 @@ struct MyGameWindow : public GUI {
   SpaceballTeam *home_team=0, *away_team=0;
   Skybox skybox;
 
-  MyGameWindow() : framebuffer(screen->gd), ball_trail("BallTrails", true, .05, .05, 0, 0),
+  MyGameWindow(Window *W) : GUI(W), framebuffer(W->gd), ball_trail("BallTrails", true, .05, .05, 0, 0),
   shooting_stars("ShootingStars", true, .1, .2, 0, 0), fireworks("Fireworks", true)
   {
     // field
@@ -359,7 +361,7 @@ struct MyGameWindow : public GUI {
     ball_trail.texture = my_app->asset("particles")->tex.ID;
     ball_trail.billboard = true;
     ball_particles = new Entity("ball_particles", my_app->asset("particles"),
-                                Entity::DrawCB(bind(&BallTrails::AssetDrawCB, &ball_trail, screen->gd, _1, _2)));
+                                Entity::DrawCB(bind(&BallTrails::AssetDrawCB, &ball_trail, W->gd, _1, _2)));
     scene.Add(ball_particles);
 
     // shooting stars
@@ -376,7 +378,7 @@ struct MyGameWindow : public GUI {
     shooting_stars.vel = v3(0, 0, -1);
     shooting_stars.always_on = false;
     star_particles = new Entity("star_particles", my_app->asset("stars"),
-                                Entity::DrawCB(bind(&ShootingStars::AssetDrawCB, &shooting_stars, screen->gd, _1, _2)));
+                                Entity::DrawCB(bind(&ShootingStars::AssetDrawCB, &shooting_stars, W->gd, _1, _2)));
     star_particles->pos = v3(0, -4, 5);
     // scene.add(star_particles);
 
@@ -386,16 +388,17 @@ struct MyGameWindow : public GUI {
     fireworks.pos_transform = &fireworks_positions;
     fireworks.rand_color = true;
 
-    menubar = screen->AddGUI(make_unique<GameMenuGUI>(FLAGS_master.c_str(), FLAGS_default_port, my_app->asset("title"), my_app->asset("glow")));
+    menubar = W->AddGUI(make_unique<GameMenuGUI>(W, FLAGS_master.c_str(), FLAGS_default_port, &my_app->asset("title")->tex));
+    menubar->EnableParticles(&scene.cam, &my_app->asset("glow")->tex);
     menubar->tab3_player_name.AssignInput(FLAGS_player_name);
     menubar->settings = &sbsettings;
     menubar->Activate();
     menubar->selected = 1;
-    screen->gui.push_back(&menubar->topbar);
-    playerlist = screen->AddGUI(make_unique<GamePlayerListGUI>("Spaceball 6006", "Team 1: silver", "Team 2: ontario"));
-    team_select = screen->AddGUI(make_unique<TeamSelectGUI>());
+    W->gui.push_back(&menubar->topbar);
+    playerlist = W->AddGUI(make_unique<GamePlayerListGUI>(W, "Spaceball 6006", "Team 1: silver", "Team 2: ontario"));
+    team_select = W->AddGUI(make_unique<TeamSelectGUI>(W));
 
-    chat = new GameChatGUI('t', reinterpret_cast<GameClient**>(&server));
+    chat = new GameChatGUI(root, 't', reinterpret_cast<GameClient**>(&server));
     chat->Write("Enter to grab mouse");
     chat->write_last = Time(0);
 
@@ -404,28 +407,29 @@ struct MyGameWindow : public GUI {
     server->map_changed_cb = bind(&MyGameWindow::HandleMapChanged, this, _1, _2, _3);
 
     // init frame buffer
-    framebuffer.Create(screen->width, screen->height, FrameBuffer::Flag::CreateTexture | FrameBuffer::Flag::ReleaseFB);
+    framebuffer.Create(W->width, W->height, FrameBuffer::Flag::CreateTexture | FrameBuffer::Flag::ReleaseFB);
     fb_tex1 = framebuffer.tex.ID;
     framebuffer.AllocTexture(&fb_tex2);
 
     SpaceballTeam *home = SpaceballTeam::GetRandom();
     LoadMap(home->name, SpaceballTeam::GetRandom(home)->name);
-    SetInitialCameraPosition();
+    SetInitialCameraPosition(&scene.cam);
 
     if (FLAGS_multitouch) {
       touchcontrols = new GameMultiTouchControls(server);
-      helper = new HelperGUI();
+      helper = new HelperGUI(root);
+      point space(W->width*.02, W->height*.05);
       const Box &lw = touchcontrols->lpad_win, &rw = touchcontrols->rpad_win;
-      helper->AddLabel(Box(lw.x + lw.w*.15, lw.y + lw.h*.5,  1, 1), "move left",     HelperGUI::Hint::UPLEFT);
-      helper->AddLabel(Box(lw.x + lw.w*.85, lw.y + lw.h*.5,  1, 1), "move right",    HelperGUI::Hint::UPRIGHT);
-      helper->AddLabel(Box(lw.x + lw.w*.5,  lw.y + lw.h*.85, 1, 1), "move forward",  HelperGUI::Hint::UP);
-      helper->AddLabel(Box(lw.x + lw.w*.5,  lw.y + lw.h*.15, 1, 1), "move back",     HelperGUI::Hint::DOWN);
-      helper->AddLabel(Box(rw.x + rw.w*.15, rw.y + rw.h*.5,  1, 1), "turn left",     HelperGUI::Hint::UPLEFT);
-      helper->AddLabel(Box(rw.x + rw.w*.85, rw.y + rw.h*.5,  1, 1), "turn right",    HelperGUI::Hint::UPRIGHT);
-      helper->AddLabel(Box(rw.x + rw.w*.5,  rw.y + rw.h*.85, 1, 1), "burst forward", HelperGUI::Hint::UP);
-      helper->AddLabel(Box(rw.x + rw.w*.5,  rw.y + rw.h*.15, 1, 1), "change player", HelperGUI::Hint::DOWN);
-      helper->AddLabel(Box(screen->width*(screen->multitouch_keyboard_x + .035), screen->height*.025, 1, 1), "keyboard", HelperGUI::Hint::UPLEFT);
-      helper->AddLabel(menubar->topbar.box, "options menu", HelperGUI::Hint::DOWN, .15);
+      helper->AddLabel(Box(lw.x + lw.w*.15, lw.y + lw.h*.5,  1, 1), "move left",     HelperGUI::Hint::UPLEFT,  space);
+      helper->AddLabel(Box(lw.x + lw.w*.85, lw.y + lw.h*.5,  1, 1), "move right",    HelperGUI::Hint::UPRIGHT, space);
+      helper->AddLabel(Box(lw.x + lw.w*.5,  lw.y + lw.h*.85, 1, 1), "move forward",  HelperGUI::Hint::UP,      space);
+      helper->AddLabel(Box(lw.x + lw.w*.5,  lw.y + lw.h*.15, 1, 1), "move back",     HelperGUI::Hint::DOWN,    space);
+      helper->AddLabel(Box(rw.x + rw.w*.15, rw.y + rw.h*.5,  1, 1), "turn left",     HelperGUI::Hint::UPLEFT,  space);
+      helper->AddLabel(Box(rw.x + rw.w*.85, rw.y + rw.h*.5,  1, 1), "turn right",    HelperGUI::Hint::UPRIGHT, space);
+      helper->AddLabel(Box(rw.x + rw.w*.5,  rw.y + rw.h*.85, 1, 1), "burst forward", HelperGUI::Hint::UP,      space);
+      helper->AddLabel(Box(rw.x + rw.w*.5,  rw.y + rw.h*.15, 1, 1), "change player", HelperGUI::Hint::DOWN,    space);
+      helper->AddLabel(Box(W->width*(W->multitouch_keyboard_x + .035), W->height*.025, 1, 1), "keyboard", HelperGUI::Hint::UPLEFT, space);
+      helper->AddLabel(menubar->topbar.box, "options menu", HelperGUI::Hint::DOWN, point(space.x, W->height*.15));
     }
   }
 
@@ -489,16 +493,16 @@ struct MyGameWindow : public GUI {
     if (world->game_type == SpaceballSettings::TYPE_TOURNAMENT) team_select->active = true;
     else { menubar->Activate(); menubar->selected = 1; }
 
-    SetInitialCameraPosition();
+    SetInitialCameraPosition(&scene.cam);
   }
 
   void HandleMapChanged(const string &home, const string &away, int t) {
     draw_skybox_only = true;
     framebuffer.Attach(fb_tex1);
-    screen->RenderToFrameBuffer(&framebuffer);
+    root->RenderToFrameBuffer(&framebuffer);
     LoadMap(home, away);
     framebuffer.Attach(fb_tex2);
-    screen->RenderToFrameBuffer(&framebuffer);
+    root->RenderToFrameBuffer(&framebuffer);
     draw_skybox_only = false;
     map_started = Now() - Time(t);
     map_transition = map_transition_start = Seconds(3).count();
@@ -530,14 +534,14 @@ struct MyGameWindow : public GUI {
     delete field->geometry;
     field->geometry = FieldGeometry(home_goal_color, away_goal_color, home_team->field_color);
 
-    screen->gd->EnableLight(0);
-    screen->gd->Light(0, GraphicsDevice::Ambient,  home_team->light.color.ambient.x);
-    screen->gd->Light(0, GraphicsDevice::Diffuse,  home_team->light.color.diffuse.x);
-    screen->gd->Light(0, GraphicsDevice::Specular, home_team->light.color.specular.x);
+    root->gd->EnableLight(0);
+    root->gd->Light(0, GraphicsDevice::Ambient,  home_team->light.color.ambient.x);
+    root->gd->Light(0, GraphicsDevice::Diffuse,  home_team->light.color.diffuse.x);
+    root->gd->Light(0, GraphicsDevice::Specular, home_team->light.color.specular.x);
   }
 
   int Frame(Window *W, unsigned clicks, int flag) {
-    screen->GetInputController<BindMap>(0)->Repeat(clicks);
+    W->GetInputController<BindMap>(0)->Repeat(clicks);
 
     if (Singleton<FlagMap>::Get()->dirty) {
       Singleton<FlagMap>::Get()->dirty = false;
@@ -558,54 +562,55 @@ struct MyGameWindow : public GUI {
     if (builtin_server_enabled) builtin_server->Frame();
 #endif
 
+    GraphicsContext gc(root->gd);
     if (map_transition > 0) {
       map_transition -= clicks;
-      screen->gd->DrawMode(DrawMode::_2D);
+      gc.gd->DrawMode(DrawMode::_2D);
       FLAGS_shadertoy_blend = 1 - float(map_transition) / map_transition_start;
-      glShadertoyShaderWindows(&my_app->warpshader, Color::grey60, screen->Box(), &framebuffer.tex);
+      glShadertoyShaderWindows(gc.gd, &my_app->warpshader, Color::grey60, W->Box(), &framebuffer.tex);
       return 0;
 
     } else {
-      screen->cam->Look(screen->gd);
-      shooting_stars.Update(screen->cam.get(), clicks, 0, 0, 0);
-      ball_trail.Update(screen->cam.get(), clicks, 0, 0, 0);
+      scene.cam.Look(gc.gd);
+      shooting_stars.Update(&scene.cam, clicks, 0, 0, 0);
+      ball_trail.Update(&scene.cam, clicks, 0, 0, 0);
       if (server->ball) ball_particles->pos = server->ball->pos;
 
       Scene::EntityVector deleted;
       Scene::LastUpdatedFilter scene_filter_deleted(0, server->last.time_frame, &deleted);
 
-      screen->gd->Light(0, GraphicsDevice::Position, &home_team->light.pos.x);
-      skybox.Draw();
+      gc.gd->Light(0, GraphicsDevice::Position, &home_team->light.pos.x);
+      skybox.Draw(gc.gd);
       if (draw_skybox_only) return 0;
 
       // Custom Scene::Draw();
       for (auto &a : my_app->asset.vec) {
         if (a.zsort) continue;
         if (a.name == "lines") {
-          scene.Draw(&a);
-          screen->gd->EnableDepthTest();
+          scene.Draw(gc.gd, &a);
+          gc.gd->EnableDepthTest();
         } else if (a.name == "ball") {
-          scene.Draw(&a, &scene_filter_deleted);
+          scene.Draw(gc.gd, &a, &scene_filter_deleted);
         } else {
-          scene.Draw(&a);
+          scene.Draw(gc.gd, &a);
         }
       }
 
       scene.ZSort(my_app->asset.vec);
-      scene.ZSortDraw(&scene_filter_deleted, clicks);
+      scene.ZSortDraw(gc.gd, &scene_filter_deleted, clicks);
       server->WorldDeleteEntity(deleted);
     }
 
-    screen->gd->DrawMode(DrawMode::_2D);
+    gc.gd->DrawMode(DrawMode::_2D);
     chat->Draw();
 
     if (FLAGS_multitouch) {
       touchcontrols->Update(clicks);
-      touchcontrols->Draw();
+      touchcontrols->Draw(gc.gd);
 
       // iPhone keyboard
       // static Font *mobile_font = Fonts::Get("MobileAtlas", "", 0, Color::white, Color::clear, 0);
-      // static Widget::Button iPhoneKeyboardButton(screen->gui_root, 0, 0, Box::FromScreen(screen->multitouch_keyboard_x, .05, .07, .05),
+      // static Widget::Button iPhoneKeyboardButton(W->gui_root, 0, 0, Box::FromScreen(W->multitouch_keyboard_x, .05, .07, .05),
       //                                           MouseController::CB(bind(&Shell::showkeyboard, &app->shell, vector<string>())));
       // iPhoneKeyboardButton.Draw(mobile_font, 5);
 
@@ -623,21 +628,21 @@ struct MyGameWindow : public GUI {
       if (server->ball) {
         // Replay camera tracks ball
         v3 targ = server->ball->pos + server->ball->vel;
-        v3 yaw_delta = v3::Norm(targ - v3(screen->cam->pos.x, targ.y, screen->cam->pos.z));
-        v3 ort = v3::Norm(targ - screen->cam->pos);
+        v3 yaw_delta = v3::Norm(targ - v3(scene.cam.pos.x, targ.y, scene.cam.pos.z));
+        v3 ort = v3::Norm(targ - scene.cam.pos);
         v3 delta = ort - yaw_delta;
-        screen->cam->up = v3(0,1,0) + delta;
-        screen->cam->ort = ort;
+        scene.cam.up = v3(0,1,0) + delta;
+        scene.cam.ort = ort;
       }
 
-      Box win(screen->width*.4, screen->height*.8, screen->width*.2, screen->height*.1, false);
+      Box win(W->width*.4, W->height*.8, W->width*.2, W->height*.1, false);
       Asset *goal = my_app->asset("goal");
       goal->tex.Bind();
-      win.Draw(goal->tex.coord);
+      win.Draw(gc.gd, goal->tex.coord);
 
       static Font *font = app->fonts->Get(FLAGS_font, "", 16);
       font->Draw(StrCat(server->last_scored_PlayerName, " scores"),
-                 Box(win.x, win.y - screen->height*.1, screen->width*.2, screen->height*.1, false), 
+                 Box(win.x, win.y - W->height*.1, W->width*.2, W->height*.1, false), 
                  0, Font::DrawFlag::AlignCenter | Font::DrawFlag::NoWrap);
 
       bool home_team_scored = server->last_scored_team == Game::Team::Home;
@@ -647,15 +652,15 @@ struct MyGameWindow : public GUI {
         if (fireworks.particles[i].dead) continue;
         fireworks.particles[i].InitColor();
       }
-      fireworks_positions[0].set(-screen->width*.2, screen->height*.8, 0);
-      fireworks_positions[1].set(-screen->width*.8, screen->height*.8, 0);
-      fireworks.Update(screen->cam.get(), clicks, 0, 0, 0);
-      fireworks.Draw(screen->gd);
-      scene.Select();
+      fireworks_positions[0].set(-W->width*.2, W->height*.8, 0);
+      fireworks_positions[1].set(-W->width*.8, W->height*.8, 0);
+      fireworks.Update(&scene.cam, clicks, 0, 0, 0);
+      fireworks.Draw(gc.gd);
+      scene.Select(gc.gd);
     }
 
     if (server->gameover.enabled()) {
-      Box win(screen->width*.4, screen->height*.9, screen->width*.2, screen->height*.1, false);
+      Box win(W->width*.4, W->height*.9, W->width*.2, W->height*.1, false);
       static Font *font = app->fonts->Get(FLAGS_font, "", 16);
       font->Draw(StrCat(server->gameover.start_ind == SpaceballGame::Team::Home ? home_team->name : away_team->name, " wins"),
                  win, 0, Font::DrawFlag::AlignCenter);
@@ -663,8 +668,8 @@ struct MyGameWindow : public GUI {
 
     if (server->replay.just_ended) {
       server->replay.just_ended = false;
-      screen->cam->ort = SpaceballGame::StartOrientation(server->team);
-      screen->cam->up  = v3(0, 1, 0);
+      scene.cam.ort = SpaceballGame::StartOrientation(server->team);
+      scene.cam.up  = v3(0, 1, 0);
     }
 
     if (team_select->active) team_select->Draw(my_app->fadershader.ID > 0 ? &my_app->fadershader : 0);
@@ -682,21 +687,21 @@ struct MyGameWindow : public GUI {
     }
 
     // Press tick for console
-    else screen->DrawDialogs();
+    else W->DrawDialogs();
 
-    Scene::Select();
+    Scene::Select(gc.gd);
 
     if (helper && helper->active) {
-      screen->gd->SetColor(helper->font->fg);
-      BoxOutline().Draw(menubar->topbar.box);
+      gc.gd->SetColor(helper->font->fg);
+      BoxOutline().Draw(&gc, menubar->topbar.box);
       helper->Draw();
     }
 
-    screen->gd->EnableBlend();
+    gc.gd->EnableBlend();
     static Font *text = app->fonts->Get(FLAGS_font, "", 8);
-    if (FLAGS_draw_fps)   text->Draw(StringPrintf("FPS = %.2f", app->FPS()),           point(screen->width*.05, screen->height*.05));
-    if (!menubar->active) text->Draw(intervalminutes(Now() - map_started),             point(screen->width*.93, screen->height*.97));
-    if (!menubar->active) text->Draw(StrCat(home_team->name, " vs ", away_team->name), point(screen->width*.01, screen->height*.97));
+    if (FLAGS_draw_fps)   text->Draw(StringPrintf("FPS = %.2f", app->FPS()),           point(W->width*.05, W->height*.05));
+    if (!menubar->active) text->Draw(intervalminutes(Now() - map_started),             point(W->width*.93, W->height*.97));
+    if (!menubar->active) text->Draw(StrCat(home_team->name, " vs ", away_team->name), point(W->width*.01, W->height*.97));
 
     return 0;
   }
@@ -756,7 +761,7 @@ void MyWindowInit(Window *W) {
 
 void MyWindowStart(Window *W) {
   CHECK_EQ(0, W->NewGUI());
-  MyGameWindow *game_gui = W->ReplaceGUI(0, make_unique<MyGameWindow>());
+  MyGameWindow *game_gui = W->ReplaceGUI(0, make_unique<MyGameWindow>(W));
   W->frame_cb = bind(&MyGameWindow::Frame, game_gui, _1, _2, _3);
   if (FLAGS_console) W->InitConsole(Callback());
 
@@ -780,10 +785,12 @@ void MyWindowStart(Window *W) {
   binds->Add(Mouse::Button::_1, Bind::TimeCB(bind(&SpaceballClient::MoveBoost, game_gui->server, _1)));
 #endif
 #ifdef LFL_EMSCRIPTEN
-  screen->grabbed_pitch_cb = function<void(int)>();
+  W->grabbed_pitch_cb = function<void(int)>();
+  binds->move_cb = bind(&Entity::MovePitchCB, &game_gui->scene.cam, _1, _2);
 #else
-  binds->Add(Key::LeftShift,  Bind::TimeCB(bind(&Entity::RollLeft,   W->cam.get(), _1)));
-  binds->Add(Key::Space,      Bind::TimeCB(bind(&Entity::RollRight,  W->cam.get(), _1)));
+  binds->move_cb = bind(&Entity::MoveCB, &game_gui->scene.cam, _1, _2);
+  binds->Add(Key::LeftShift,  Bind::TimeCB(bind(&Entity::RollLeft,   &game_gui->scene.cam, _1)));
+  binds->Add(Key::Space,      Bind::TimeCB(bind(&Entity::RollRight,  &game_gui->scene.cam, _1)));
 #endif
   binds->Add(Key::Tab,        Bind::TimeCB(bind(&GUI::Activate, game_gui->playerlist)));
   binds->Add(Key::F1,         Bind::CB(bind(&GameClient::SetCamera,  game_gui->server,  vector<string>(1, string("1")))));
@@ -826,10 +833,10 @@ extern "C" void MyAppCreate(int argc, const char* const* argv) {
   my_app = new MyAppState();
 #ifdef LFL_MOBILE
   FLAGS_target_fps = 30;
-  screen->SetSize(point(420, 380));
+  screen->SetBox(Box(420, 380));
 #else
   FLAGS_target_fps = 60;
-  screen->SetSize(point(840, 760));
+  screen->SetBox(Box(840, 760));
 #endif
   app->name = "Spaceball";
   app->window_start_cb = MyWindowStart;
@@ -883,7 +890,7 @@ extern "C" int MyAppMain() {
   my_app->asset("field")->blendt = GraphicsDevice::SrcAlpha;
   Asset *lines = my_app->asset("lines");
   lines->geometry = FieldLines(lines->tex.coord[2], lines->tex.coord[3]);
-  my_app->caust.Load("%s%02d.%s", "caust", "png", 32);
+  Asset::LoadTextureArray("%s%02d.%s", "caust", "png", 32, &my_app->caust, VideoAssetLoader::Flag::Default | VideoAssetLoader::Flag::RepeatGL);
 
   if (FLAGS_enable_audio) {
     // soundasset.Add(name,  filename,              ringbuf, channels, sample_rate, seconds );
