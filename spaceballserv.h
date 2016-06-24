@@ -274,13 +274,13 @@ struct SpaceballGame : public Game {
     return ret;
   }
 
-  Entity *NewSpectator(EntityID id, int team) { return Add(id, new Ship(screen->shell->asset("ship"), 0, v3(), v3(0,0,1), v3(0,1,0), 0)); }
+  Entity *NewSpectator(EntityID id, int team) { return Add(id, new Ship(app->asset("ship"), 0, v3(), v3(0,0,1), v3(0,1,0), 0)); }
   Entity *NewShip(EntityID id, int team) {
     bool red = team == Team::Home;
     v3 ort = StartOrientation(team);
     v3 pos = StartPosition(team, &red_startindex, &blue_startindex);
     void *body = physics->AddBox(Ship::radius(), pos, ort, Ship::mass(), Physics::CollidesWith(ShipBit, BallBit));
-    Ship *ship = new Ship(screen->shell->asset(red ? "shipred" : "shipblue"), body, pos, ort, v3(0,1,0), StartPositions::get()->blue[0].y);
+    Ship *ship = new Ship(app->asset(red ? "shipred" : "shipblue"), body, pos, ort, v3(0,1,0), StartPositions::get()->blue[0].y);
     AssignShipColor(ship, red ? home : away);
     Entity *ret = Add(id, ship);
     physics->SetContinuous(ret, .001, Ship::radius().z - .001);
@@ -290,7 +290,7 @@ struct SpaceballGame : public Game {
   Entity *NewBall(EntityID id) {
     void *body = physics->AddSphere(Ball::radius(), Ball::start_pos(), v3(0,0,1), Ball::mass(),
                                     Physics::CollidesWith(BallBit, WallBit|ShipBit));
-    Entity *ret = Add(id, new Ball(screen->shell->asset("ball"), body, Ball::start_pos(), v3(0,0,1)));
+    Entity *ret = Add(id, new Ball(app->asset("ball"), body, Ball::start_pos(), v3(0,0,1)));
     physics->SetContinuous(ret, .001, Ball::radius() - .001);
     return ret;
   }

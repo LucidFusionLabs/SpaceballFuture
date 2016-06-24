@@ -38,8 +38,6 @@ typedef SpaceballGame::Ship MyShip;
 typedef SpaceballGame::Ball MyBall;
 
 struct MyAppState {
-  AssetMap asset;
-  SoundAssetMap soundasset;
   TextureArray caust;
   Shader fadershader, warpshader, explodeshader;
 } *my_app;
@@ -188,7 +186,7 @@ struct SpaceballClient : public GameClient {
   }
 
   void AnimationChange(Entity *e, int NewID, int NewSeq) {
-    static SoundAsset *bounce = my_app->soundasset("bounce");
+    static SoundAsset *bounce = app->soundasset("bounce");
     if      (NewID == SpaceballGame::AnimShipBoost) { if (FLAGS_enable_audio) app->PlaySoundEffect(bounce, e->pos, e->vel); }
     else if (NewID == SpaceballGame::AnimExplode)   e->animation.Start(&my_app->explodeshader);
   }
@@ -342,8 +340,8 @@ struct MyGameWindow : public GUI {
   shooting_stars("ShootingStars", true, .1, .2, 0, 0), fireworks("Fireworks", true)
   {
     // field
-    scene.Add(new Entity("lines", my_app->asset("lines")));
-    scene.Add(new Entity("field", my_app->asset("field"),
+    scene.Add(new Entity("lines", app->asset("lines")));
+    scene.Add(new Entity("field", app->asset("field"),
               Entity::DrawCB(bind(&TextureArray::DrawSequence, &my_app->caust, _1, _2, &caust_ind))));
 
     // ball trail
@@ -358,15 +356,15 @@ struct MyGameWindow : public GUI {
     ball_trail.age_min = 1;
     ball_trail.age_max = 3;
     ball_trail.radius_decay = false;
-    ball_trail.texture = my_app->asset("particles")->tex.ID;
+    ball_trail.texture = app->asset("particles")->tex.ID;
     ball_trail.billboard = true;
-    ball_particles = new Entity("ball_particles", my_app->asset("particles"),
+    ball_particles = new Entity("ball_particles", app->asset("particles"),
                                 Entity::DrawCB(bind(&BallTrails::AssetDrawCB, &ball_trail, W->gd, _1, _2)));
     scene.Add(ball_particles);
 
     // shooting stars
-    my_app->asset("stars")->tex.ID = my_app->asset("particles")->tex.ID;
-    shooting_stars.texture = my_app->asset("particles")->tex.ID;
+    app->asset("stars")->tex.ID = app->asset("particles")->tex.ID;
+    shooting_stars.texture = app->asset("particles")->tex.ID;
     shooting_stars.burst = 16;
     shooting_stars.color = Color(1.0, 1.0, 1.0, 1.0);
     shooting_stars.ticks_step = 10;
@@ -377,19 +375,19 @@ struct MyGameWindow : public GUI {
     shooting_stars.billboard = true;
     shooting_stars.vel = v3(0, 0, -1);
     shooting_stars.always_on = false;
-    star_particles = new Entity("star_particles", my_app->asset("stars"),
+    star_particles = new Entity("star_particles", app->asset("stars"),
                                 Entity::DrawCB(bind(&ShootingStars::AssetDrawCB, &shooting_stars, W->gd, _1, _2)));
     star_particles->pos = v3(0, -4, 5);
     // scene.add(star_particles);
 
     // fireworks
     fireworks_positions.resize(2);
-    fireworks.texture = my_app->asset("particles")->tex.ID;
+    fireworks.texture = app->asset("particles")->tex.ID;
     fireworks.pos_transform = &fireworks_positions;
     fireworks.rand_color = true;
 
-    menubar = W->AddGUI(make_unique<GameMenuGUI>(W, FLAGS_master.c_str(), FLAGS_default_port, &my_app->asset("title")->tex));
-    menubar->EnableParticles(&scene.cam, &my_app->asset("glow")->tex);
+    menubar = W->AddGUI(make_unique<GameMenuGUI>(W, FLAGS_master.c_str(), FLAGS_default_port, &app->asset("title")->tex));
+    menubar->EnableParticles(&scene.cam, &app->asset("glow")->tex);
     menubar->tab3_player_name.AssignInput(FLAGS_player_name);
     menubar->settings = &sbsettings;
     menubar->Activate();
@@ -448,7 +446,7 @@ struct MyGameWindow : public GUI {
 
 #ifdef LFL_BUILTIN_SERVER
     if (!builtin_server) {
-      builtin_server = new SpaceballServer(StrCat(FLAGS_player_name, "'s server"), 20, &my_app->asset.vec);
+      builtin_server = new SpaceballServer(StrCat(FLAGS_player_name, "'s server"), 20, &app->asset.vec);
       builtin_server->bots = new SpaceballBots(builtin_server->world);
       builtin_server->World()->game_finished_cb = bind(&MyGameWindow::HandleGameFinished, this, builtin_server->World());
       builtin_server->InitTransport(local_transport_protocol, FLAGS_default_port);
@@ -516,8 +514,8 @@ struct MyGameWindow : public GUI {
 
     home_goal_color = home_team->goal_color;
     away_goal_color = away_team->goal_color;
-    my_app->asset("shipred" )->col = home_team->ship_color.diffuse;
-    my_app->asset("shipblue")->col = away_team->ship_color.diffuse;
+    app->asset("shipred" )->col = home_team->ship_color.diffuse;
+    app->asset("shipblue")->col = away_team->ship_color.diffuse;
 
     float hh, hs, hv, ah, as, av;
     home_goal_color.ToHSV(&hh, &hs, &hv);
@@ -527,10 +525,10 @@ struct MyGameWindow : public GUI {
       bool reverse = ah < hh;
       away_goal_color = Color::FromHSV(ah + (reverse ? -180 : 180), as, av);
       away_team->ship_color.diffuse.ToHSV(&ah, &as, &av);
-      my_app->asset("shipblue")->col = Color::FromHSV(ah + (reverse ? -180 : 180), as, av);
+      app->asset("shipblue")->col = Color::FromHSV(ah + (reverse ? -180 : 180), as, av);
     }
 
-    Asset *field = my_app->asset("field");
+    Asset *field = app->asset("field");
     delete field->geometry;
     field->geometry = FieldGeometry(home_goal_color, away_goal_color, home_team->field_color);
 
@@ -584,7 +582,7 @@ struct MyGameWindow : public GUI {
       if (draw_skybox_only) return 0;
 
       // Custom Scene::Draw();
-      for (auto &a : my_app->asset.vec) {
+      for (auto &a : app->asset.vec) {
         if (a.zsort) continue;
         if (a.name == "lines") {
           scene.Draw(gc.gd, &a);
@@ -596,7 +594,7 @@ struct MyGameWindow : public GUI {
         }
       }
 
-      scene.ZSort(my_app->asset.vec);
+      scene.ZSort(app->asset.vec);
       scene.ZSortDraw(gc.gd, &scene_filter_deleted, clicks);
       server->WorldDeleteEntity(deleted);
     }
@@ -636,7 +634,7 @@ struct MyGameWindow : public GUI {
       }
 
       Box win(W->width*.4, W->height*.8, W->width*.2, W->height*.1, false);
-      Asset *goal = my_app->asset("goal");
+      Asset *goal = app->asset("goal");
       goal->tex.Bind();
       win.Draw(gc.gd, goal->tex.coord);
 
@@ -728,7 +726,7 @@ struct MyGameWindow : public GUI {
     EnableLocalServer(SpaceballSettings::TYPE_EMPTYCOURT);
     if (arg.empty()) { INFO("eg: gplus_server participant_id"); return; }
     INFO("GPlusServer ", arg[0]);
-    AndroidGPlusService(builtin_server->gplus_transport);
+    Singleton<GPlus>::Get()->server = builtin_server->gplus_transport;
     server->Connect(Protocol::GPLUS, "127.0.0.1", FLAGS_default_port);
 #endif
   }
@@ -747,7 +745,7 @@ struct MyGameWindow : public GUI {
   void SwitchPlayerCmd(const vector<string> &) { if (server) server->Rcon("player_switch"); }
   void FieldColorCmd(const vector<string> &arg) {
     Color fc(arg.size() ? arg[0] : "");
-    Asset *field = my_app->asset("field");
+    Asset *field = app->asset("field");
     delete field->geometry;
     field->geometry = FieldGeometry(home_goal_color, away_goal_color, fc);
     INFO("field_color = ", fc.HexString());
@@ -804,7 +802,7 @@ void MyWindowStart(Window *W) {
   binds->Add(Key::Backquote,  Bind::CB(bind([=](){ if (!game_gui->menubar->active) W->shell->console(vector<string>()); })));
   binds->Add(Key::Quote,      Bind::CB(bind([=](){ if (!game_gui->menubar->active) W->shell->console(vector<string>()); })));
 
-  W->shell = make_unique<Shell>(&my_app->asset, &my_app->soundasset, nullptr);
+  W->shell = make_unique<Shell>();
   W->shell->Add("server",       bind(&MyGameWindow::ServerCmd,      game_gui, _1));
   W->shell->Add("field_color",  bind(&MyGameWindow::FieldColorCmd,  game_gui, _1));
   W->shell->Add("local_server", bind(&MyGameWindow::LocalServerCmd, game_gui, _1));
@@ -831,18 +829,20 @@ extern "C" void MyAppCreate(int argc, const char* const* argv) {
   app = new Application(argc, argv);
   screen = new Window();
   my_app = new MyAppState();
+  app->name = "Spaceball";
+  app->window_start_cb = MyWindowStart;
+  app->window_init_cb = MyWindowInit;
+  app->window_init_cb(screen);
+  app->exit_cb = []{ delete my_app; };
 #ifdef LFL_MOBILE
+  app->SetTitleBar(false);
+  app->SetKeepScreenOn(true);
   FLAGS_target_fps = 30;
   screen->SetBox(Box(420, 380));
 #else
   FLAGS_target_fps = 60;
   screen->SetBox(Box(840, 760));
 #endif
-  app->name = "Spaceball";
-  app->window_start_cb = MyWindowStart;
-  app->window_init_cb = MyWindowInit;
-  app->window_init_cb(screen);
-  app->exit_cb = []{ delete my_app; };
 }
 
 extern "C" int MyAppMain() {
@@ -863,8 +863,7 @@ extern "C" int MyAppMain() {
 
   if (FLAGS_player_name.empty()) {
 #if defined(LFL_ANDROID)
-    char buf[40];
-    if (AndroidDeviceName(buf, sizeof(buf))) FLAGS_player_name = buf;
+    FLAGS_player_name = Singleton<JNI>::Get()->GetDeviceName();
 #endif
     if (FLAGS_player_name.empty()) FLAGS_player_name = "n00by";
   }
@@ -874,30 +873,30 @@ extern "C" int MyAppMain() {
     Singleton<FlagMap>::Get()->Set("first_run", "0");
   }
 
-  // my_app->assets.Add(name,     texture,          scale,            trans, rotate, geometry      hull,                            cubemap,     texgen));
-  my_app->asset.Add("particles",  "particle.png",   1,                0,     0,      nullptr,      nullptr,                         0,           0);
-  my_app->asset.Add("stars",      "",               1,                0,     0,      nullptr,      nullptr,                         0,           0);
-  my_app->asset.Add("glow",       "glow.png",       1,                0,     0,      nullptr,      nullptr,                         0,           0);
-  my_app->asset.Add("field",      "",               1,                0,     0,      nullptr,      nullptr,                         0,           0);
-  my_app->asset.Add("lines",      "lines.png",      1,                0,     0,      nullptr,      nullptr,                         0,           0);
-  my_app->asset.Add("ball",       "",               MyBall::radius(), 1,     0,      "sphere.obj", nullptr,                         0);
-  my_app->asset.Add("ship",       "ship.png",       .05,              1,     0,      "ship.obj",   Cube::Create(MyShip::radius()).release(), 0, &ShipDraw);
-  my_app->asset.Add("shipred",    "",               0,                0,     0,      nullptr,      nullptr,                         0,           0);
-  my_app->asset.Add("shipblue",   "",               0,                0,     0,      nullptr,      nullptr,                         0,           0);
-  my_app->asset.Add("title",      "title.png",      1,                0,     0,      nullptr,      nullptr,                         0,           0);
-  my_app->asset.Add("goal",       "goal.png",       1,                0,     0,      nullptr,      nullptr,                         0,           0);
-  my_app->asset.Load();
-  my_app->asset("field")->blendt = GraphicsDevice::SrcAlpha;
-  Asset *lines = my_app->asset("lines");
+  // app->assets.Add(name,     texture,          scale,            trans, rotate, geometry      hull,                            cubemap,     texgen));
+  app->asset.Add("particles",  "particle.png",   1,                0,     0,      nullptr,      nullptr,                         0,           0);
+  app->asset.Add("stars",      "",               1,                0,     0,      nullptr,      nullptr,                         0,           0);
+  app->asset.Add("glow",       "glow.png",       1,                0,     0,      nullptr,      nullptr,                         0,           0);
+  app->asset.Add("field",      "",               1,                0,     0,      nullptr,      nullptr,                         0,           0);
+  app->asset.Add("lines",      "lines.png",      1,                0,     0,      nullptr,      nullptr,                         0,           0);
+  app->asset.Add("ball",       "",               MyBall::radius(), 1,     0,      "sphere.obj", nullptr,                         0);
+  app->asset.Add("ship",       "ship.png",       .05,              1,     0,      "ship.obj",   Cube::Create(MyShip::radius()).release(), 0, &ShipDraw);
+  app->asset.Add("shipred",    "",               0,                0,     0,      nullptr,      nullptr,                         0,           0);
+  app->asset.Add("shipblue",   "",               0,                0,     0,      nullptr,      nullptr,                         0,           0);
+  app->asset.Add("title",      "title.png",      1,                0,     0,      nullptr,      nullptr,                         0,           0);
+  app->asset.Add("goal",       "goal.png",       1,                0,     0,      nullptr,      nullptr,                         0,           0);
+  app->asset.Load();
+  app->asset("field")->blendt = GraphicsDevice::SrcAlpha;
+  Asset *lines = app->asset("lines");
   lines->geometry = FieldLines(lines->tex.coord[2], lines->tex.coord[3]);
   Asset::LoadTextureArray("%s%02d.%s", "caust", "png", 32, &my_app->caust, VideoAssetLoader::Flag::Default | VideoAssetLoader::Flag::RepeatGL);
 
   if (FLAGS_enable_audio) {
-    // soundasset.Add(name,  filename,              ringbuf, channels, sample_rate, seconds );
-    my_app->soundasset.Add("music",  "dstsecondballad.ogg", nullptr, 0,        0,           0       );
-    my_app->soundasset.Add("bounce", "scififortyfive.wav",  nullptr, 0,        0,           0       );
-    my_app->soundasset.Load();
-    auto bounce = my_app->soundasset("bounce");
+    // app->soundasset.Add(name,  filename,              ringbuf, channels, sample_rate, seconds );
+    app->soundasset.Add("music",  "dstsecondballad.ogg", nullptr, 0,        0,           0       );
+    app->soundasset.Add("bounce", "scififortyfive.wav",  nullptr, 0,        0,           0       );
+    app->soundasset.Load();
+    auto bounce = app->soundasset("bounce");
     bounce->max_distance = 1000;
     bounce->reference_distance = SpaceballGame::FieldDefinition::get()->Length() / 3.0;
   }
@@ -915,8 +914,8 @@ extern "C" int MyAppMain() {
   }
 
   // Color ships red and blue
-  Asset *ship = my_app->asset("ship"), *shipred = my_app->asset("shipred"), *shipblue = my_app->asset("shipblue");
-  ship->particleTexID = my_app->asset("glow")->tex.ID;
+  Asset *ship = app->asset("ship"), *shipred = app->asset("shipred"), *shipblue = app->asset("shipblue");
+  ship->particleTexID = app->asset("glow")->tex.ID;
   ship->zsort = true;
   Asset::Copy(ship, shipred);
   Asset::Copy(ship, shipblue);
@@ -926,7 +925,7 @@ extern "C" int MyAppMain() {
   MyGameWindow *game_gui = screen->GetOwnGUI<MyGameWindow>(0);
 
   // add reflection to ball
-  Asset *ball = my_app->asset("ball"), *sky = game_gui->skybox.asset();
+  Asset *ball = app->asset("ball"), *sky = game_gui->skybox.asset();
   if (sky->tex.cubemap) {
     ball->tex.ID = sky->tex.ID;
     ball->tex.cubemap = sky->tex.cubemap;
@@ -943,6 +942,6 @@ extern "C" int MyAppMain() {
   credits->emplace_back("Fonts",        "Cpr.Sparhelt", "http://www.facebook.com/pages/Magique-Fonts-Koczman-B%C3%A1lint/110683665690882", "");
   credits->emplace_back("Image format", "Libpng",       "http://www.libpng.org/",          "");
 
-  if (FLAGS_enable_audio) app->PlayBackgroundMusic(my_app->soundasset("music"));
+  if (FLAGS_enable_audio) app->PlayBackgroundMusic(app->soundasset("music"));
   return app->Main();
 }
