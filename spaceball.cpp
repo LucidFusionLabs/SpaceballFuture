@@ -543,7 +543,7 @@ struct MyGameWindow : public GUI {
 
     if (Singleton<FlagMap>::Get()->dirty) {
       Singleton<FlagMap>::Get()->dirty = false;
-      SettingsFile::Write(save_settings, LFAppDownloadDir(), "settings");
+      SettingsFile::Write(save_settings, app->savedir, "settings");
     }
 
     if (FLAGS_multitouch) {
@@ -636,7 +636,7 @@ struct MyGameWindow : public GUI {
       Box win(W->width*.4, W->height*.8, W->width*.2, W->height*.1, false);
       Asset *goal = app->asset("goal");
       goal->tex.Bind();
-      win.Draw(gc.gd, goal->tex.coord);
+      gc.DrawTexturedBox(win, goal->tex.coord);
 
       static Font *font = app->fonts->Get(FLAGS_font, "", 16);
       font->Draw(StrCat(server->last_scored_PlayerName, " scores"),
@@ -857,14 +857,12 @@ extern "C" int MyAppMain() {
   atlas_engine->Init(FontDesc("lightning",                "",  0, Color::white, Color::clear, 0, false));
   atlas_engine->Init(FontDesc(StrCat(FLAGS_font, "Glow"), "", 32, Color::white, Color::clear, 0, false));
 
-  SettingsFile::Read(LFAppDownloadDir(), "settings");
+  SettingsFile::Read(app->savedir, "settings");
   Singleton<FlagMap>::Get()->dirty = false;
   screen->gd->default_draw_mode = DrawMode::_3D;
 
   if (FLAGS_player_name.empty()) {
-#if defined(LFL_ANDROID)
-    FLAGS_player_name = Singleton<JNI>::Get()->GetDeviceName();
-#endif
+    FLAGS_player_name = app->GetSystemDeviceName();
     if (FLAGS_player_name.empty()) FLAGS_player_name = "n00by";
   }
 
