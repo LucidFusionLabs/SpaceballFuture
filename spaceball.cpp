@@ -763,6 +763,17 @@ void MyWindowStart(Window *W) {
   W->frame_cb = bind(&MyGameWindow::Frame, game_gui, _1, _2, _3);
   if (FLAGS_console) W->InitConsole(Callback());
 
+  W->shell = make_unique<Shell>(W);
+  W->shell->Add("server",       bind(&MyGameWindow::ServerCmd,      game_gui, _1));
+  W->shell->Add("field_color",  bind(&MyGameWindow::FieldColorCmd,  game_gui, _1));
+  W->shell->Add("local_server", bind(&MyGameWindow::LocalServerCmd, game_gui, _1));
+  W->shell->Add("gplus_client", bind(&MyGameWindow::GPlusClientCmd, game_gui, _1));
+  W->shell->Add("gplus_server", bind(&MyGameWindow::GPlusServerCmd, game_gui, _1));
+  W->shell->Add("rcon",         bind(&GameClient::RconCmd,      game_gui->server, _1));
+  W->shell->Add("name",         bind(&GameClient::SetName,      game_gui->server, _1));
+  W->shell->Add("team",         bind(&GameClient::SetTeam,      game_gui->server, _1));
+  W->shell->Add("me",           bind(&GameClient::MyEntityName, game_gui->server, _1));
+
   BindMap *binds = W->AddInputController(make_unique<BindMap>());
 #if 0                                   
   binds->Add('w',             Bind::TimeCB(bind(&Entity::MoveFwd,       W->camMain, _1)));
@@ -801,17 +812,6 @@ void MyWindowStart(Window *W) {
   binds->Add(Key::Escape,     Bind::CB(bind([=](){ game_gui->menubar->ToggleActive(); })));
   binds->Add(Key::Backquote,  Bind::CB(bind([=](){ if (!game_gui->menubar->active) W->shell->console(vector<string>()); })));
   binds->Add(Key::Quote,      Bind::CB(bind([=](){ if (!game_gui->menubar->active) W->shell->console(vector<string>()); })));
-
-  W->shell = make_unique<Shell>();
-  W->shell->Add("server",       bind(&MyGameWindow::ServerCmd,      game_gui, _1));
-  W->shell->Add("field_color",  bind(&MyGameWindow::FieldColorCmd,  game_gui, _1));
-  W->shell->Add("local_server", bind(&MyGameWindow::LocalServerCmd, game_gui, _1));
-  W->shell->Add("gplus_client", bind(&MyGameWindow::GPlusClientCmd, game_gui, _1));
-  W->shell->Add("gplus_server", bind(&MyGameWindow::GPlusServerCmd, game_gui, _1));
-  W->shell->Add("rcon",         bind(&GameClient::RconCmd,      game_gui->server, _1));
-  W->shell->Add("name",         bind(&GameClient::SetName,      game_gui->server, _1));
-  W->shell->Add("team",         bind(&GameClient::SetTeam,      game_gui->server, _1));
-  W->shell->Add("me",           bind(&GameClient::MyEntityName, game_gui->server, _1));
 };
 
 }; // namespace LFL
@@ -827,13 +827,13 @@ extern "C" void MyAppCreate(int argc, const char* const* argv) {
   FLAGS_enable_audio = FLAGS_enable_video = FLAGS_enable_input = FLAGS_enable_network = FLAGS_console = 1;
   FLAGS_depth_buffer_bits = 16;
   app = new Application(argc, argv);
-  screen = new Window();
+  app->focused = new Window();
   my_app = new MyAppState();
   app->name = "Spaceball";
   app->window_start_cb = MyWindowStart;
   app->window_init_cb = MyWindowInit;
-  app->window_init_cb(screen);
-  app->exit_cb = []{ delete my_app; };
+  app->window_init_cb(app->focused);
+  // app->exit_cb = []{ delete my_app; };
 #ifdef LFL_MOBILE
   app->SetTitleBar(false);
   app->SetKeepScreenOn(true);
@@ -841,7 +841,7 @@ extern "C" void MyAppCreate(int argc, const char* const* argv) {
   screen->SetBox(Box(420, 380));
 #else
   FLAGS_target_fps = 60;
-  screen->SetBox(Box(840, 760));
+  app->focused->SetBox(Box(840, 760));
 #endif
 }
 
@@ -859,7 +859,8 @@ extern "C" int MyAppMain() {
 
   SettingsFile::Read(app->savedir, "settings");
   Singleton<FlagMap>::Get()->dirty = false;
-  screen->gd->default_draw_mode = DrawMode::_3D;
+  GraphicsContext gc(app->focused->gd);
+  gc.gd->default_draw_mode = DrawMode::_3D;
 
   if (FLAGS_player_name.empty()) {
     FLAGS_player_name = app->GetSystemDeviceName();
@@ -899,15 +900,15 @@ extern "C" int MyAppMain() {
     bounce->reference_distance = SpaceballGame::FieldDefinition::get()->Length() / 3.0;
   }
 
-  if (screen->gd->ShaderSupport()) {
+  if (gc.gd->ShaderSupport()) {
     string fader_shader  = Asset::FileContents("fader.frag");
     string warp_shader = Asset::FileContents("warp.frag");
-    string explode_shader = screen->gd->vertex_shader;
+    string explode_shader = gc.gd->vertex_shader;
     CHECK(ReplaceString(&explode_shader, "// LFLPositionShaderMarker",
                         Asset::FileContents("explode.vert")));
 
-    Shader::Create("fadershader",   screen->gd->vertex_shader, fader_shader,             "",                     &my_app->fadershader);
-    Shader::Create("explodeshader", explode_shader,            screen->gd->pixel_shader, ShaderDefines(0,1,1,0), &my_app->explodeshader);
+    Shader::Create("fadershader",   gc.gd->vertex_shader, fader_shader,        "",                     &my_app->fadershader);
+    Shader::Create("explodeshader", explode_shader,       gc.gd->pixel_shader, ShaderDefines(0,1,1,0), &my_app->explodeshader);
     Shader::CreateShaderToy("warpshader", warp_shader, &my_app->warpshader);
   }
 
@@ -919,8 +920,8 @@ extern "C" int MyAppMain() {
   Asset::Copy(ship, shipblue);
   shipred->color = shipblue->color = true;
 
-  app->StartNewWindow(screen);
-  MyGameWindow *game_gui = screen->GetOwnGUI<MyGameWindow>(0);
+  app->StartNewWindow(app->focused);
+  MyGameWindow *game_gui = app->focused->GetOwnGUI<MyGameWindow>(0);
 
   // add reflection to ball
   Asset *ball = app->asset("ball"), *sky = game_gui->skybox.asset();

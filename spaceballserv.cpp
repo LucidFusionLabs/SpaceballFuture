@@ -54,7 +54,7 @@ int Frame(LFL::Window *W, unsigned clicks, int flag) { return server->Frame(); }
 
 int SpaceballServer(int argc, const char* const* argv) {
   FLAGS_target_fps = FLAGS_framerate;
-  screen->frame_cb = Frame;
+  app->focused->frame_cb = Frame;
 
   // assets.push_back(Asset(name,      texture, scale, trans, rotate, geometry  hull, cubemap, texgen));
   assets.push_back(Asset("ship",       "",      0,     0,     0,      0,        0,    0,       0     ));
@@ -82,7 +82,7 @@ using namespace LFL;
 
 extern "C" void MyAppCreate(int argc, const char* const* argv) {
   app = new Application(argc, argv);
-  screen = new Window();
+  app->focused = new Window();
   app->name = "spaceballserv";
 }
 
