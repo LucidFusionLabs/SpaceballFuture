@@ -838,7 +838,7 @@ extern "C" void MyAppCreate(int argc, const char* const* argv) {
   app->SetTitleBar(false);
   app->SetKeepScreenOn(true);
   FLAGS_target_fps = 30;
-  screen->SetBox(Box(420, 380));
+  app->focused->SetBox(Box(420, 380));
 #else
   FLAGS_target_fps = 60;
   app->focused->SetBox(Box(840, 760));
