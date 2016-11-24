@@ -253,7 +253,7 @@ struct TeamSelectGUI : public GUI {
   }
 
   void SetHomeTeamIndex(int n) { home_team = n; child_box.Clear(); }
-  void Start() { ShellRun("local_server"); }
+  void Start() { root->shell->Run("local_server"); }
 
   void Draw(Shader *MyShader) {
     GraphicsContext gc(root->gd);
