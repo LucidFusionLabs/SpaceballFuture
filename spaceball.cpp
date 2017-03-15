@@ -697,7 +697,7 @@ struct MyGameWindow : public GUI {
 
     gc.gd->EnableBlend();
     static Font *text = app->fonts->Get(FLAGS_font, "", 8);
-    if (FLAGS_draw_fps)   text->Draw(StringPrintf("FPS = %.2f", app->FPS()),           point(W->width*.05, W->height*.05));
+    if (FLAGS_draw_fps)   text->Draw(StringPrintf("FPS = %.2f", root->fps.FPS()),      point(W->width*.05, W->height*.05));
     if (!menubar->active) text->Draw(intervalminutes(Now() - map_started),             point(W->width*.93, W->height*.97));
     if (!menubar->active) text->Draw(StrCat(home_team->name, " vs ", away_team->name), point(W->width*.01, W->height*.97));
 
@@ -827,7 +827,7 @@ extern "C" void MyAppCreate(int argc, const char* const* argv) {
   FLAGS_enable_audio = FLAGS_enable_video = FLAGS_enable_input = FLAGS_enable_network = FLAGS_console = 1;
   FLAGS_depth_buffer_bits = 16;
   app = new Application(argc, argv);
-  app->focused = new Window();
+  app->focused = Window::Create();
   my_app = new MyAppState();
   app->name = "Spaceball";
   app->window_start_cb = MyWindowStart;

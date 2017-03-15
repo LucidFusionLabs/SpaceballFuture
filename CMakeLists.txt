@@ -1,7 +1,7 @@
 # $Id: CMakeLists.txt 1320 2014-10-26 08:12:52Z justin $
 
 lfl_set_os_toolkit(SPACEBALL)
-lfl_project(spaceball)
+lfl_project(spaceball com.lucidfusionlabs.SpaceballFuture)
 
 if(NOT LFL_MOBILE)
 lfl_add_package(spaceballserv SOURCES spaceballserv.cpp
