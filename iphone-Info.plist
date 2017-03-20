@@ -7,7 +7,7 @@
 	<key>CFBundleDisplayName</key>
 	<string>SpaceballFuture</string>
 	<key>CFBundleExecutable</key>
-	<string>spaceball</string>
+	<string>SpaceballFuture</string>
 	<key>CFBundleIconFile</key>
 	<string>icon</string>
 	<key>CFBundleIdentifier</key>
