@@ -152,7 +152,7 @@ struct SpaceballClient : public GameClient {
   string last_scored_PlayerName;
   vector<v3> thrusters_transform;
   function<void(const string&, const string&, int)> map_changed_cb;
-  SpaceballClient(Game *w, GUI *PlayerList, TextArea *Chat) : GameClient(w, PlayerList, Chat) {
+  SpaceballClient(Game *w, View *PlayerList, TextArea *Chat) : GameClient(w, PlayerList, Chat) {
     thrusters_transform.push_back(v3(-.575, -.350, -.1));
     thrusters_transform.push_back(v3( .525, -.350, -.1));
     thrusters_transform.push_back(v3(-.025,  .525, -.1));
@@ -232,19 +232,19 @@ struct SpaceballClient : public GameClient {
   }
 };
 
-struct TeamSelectGUI : public GUI {
+struct TeamSelectView : public View {
   vector<SpaceballTeam> *teams;
   FontRef font, bright_font, glow_font, team_font;
   Widget::Button start_button;
   vector<Widget::Button> team_buttons;
   int home_team=0, away_team=0;
 
-  TeamSelectGUI(Window *W) : GUI(W), teams(SpaceballTeam::GetList()),
+  TeamSelectView(Window *W) : View(W), teams(SpaceballTeam::GetList()),
   font       (FontDesc(FLAGS_font,                 "", 8, Color::grey80)),
   bright_font(FontDesc(FLAGS_font,                 "", 8, Color::white)),
   glow_font  (FontDesc(StrCat(FLAGS_font, "Glow"), "", 8, Color::white)),
   team_font  (FontDesc("sbmaps")),
-  start_button(this, 0, "start", MouseController::CB(bind(&TeamSelectGUI::Start, this))) {
+  start_button(this, 0, "start", MouseController::CB(bind(&TeamSelectView::Start, this))) {
     start_button.outline_topleft     = &Color::grey80;
     start_button.outline_bottomright = &Color::grey40;
     start_button.solid = &Color::grey60;
@@ -258,7 +258,7 @@ struct TeamSelectGUI : public GUI {
   void Draw(Shader *MyShader) {
     GraphicsContext gc(root->gd);
     glShadertoyShaderWindows(gc.gd, MyShader, Color(25, 60, 130, 120), box);
-    GUI::Draw();
+    View::Draw();
     gc.gd->SetColor(Color::white);
     gc.gd->SetColor(Color::grey20); BoxTopLeftOutline    ().Draw(&gc, team_buttons[home_team].GetHitBoxBox());
     gc.gd->SetColor(Color::grey60); BoxBottomRightOutline().Draw(&gc, team_buttons[home_team].GetHitBoxBox());
@@ -271,7 +271,7 @@ struct TeamSelectGUI : public GUI {
     for (int i=0; i<team_buttons.size(); i++) {
       team_buttons[i] =
         Widget::Button(this, team_font->FindGlyph((*teams)[i].font_index), (*teams)[i].name,
-                       MouseController::CB(bind(&TeamSelectGUI::SetHomeTeamIndex, this, i)));
+                       MouseController::CB(bind(&TeamSelectView::SetHomeTeamIndex, this, i)));
       team_buttons[i].outline_w = 1;
       team_buttons[i].outline_topleft     = &Color::grey60;
       team_buttons[i].outline_bottomright = &Color::grey20;
@@ -279,7 +279,7 @@ struct TeamSelectGUI : public GUI {
 
     box = root->Box(.1, .1, .8, .8);
     int bw=box.w*2/13.0, bh=bw, sx=bw/2, px=(box.w - (bw*4 + sx*3))/2;
-    Flow flow(&box, font, ResetGUI());
+    Flow flow(&box, font, ResetView());
     flow.AppendNewlines(1);
     flow.p.x += px;
     for (int i = 0; i < team_buttons.size(); i++) {
@@ -299,7 +299,7 @@ struct TeamSelectGUI : public GUI {
   }
 };
 
-struct MyGameWindow : public GUI {
+struct MyGameWindow : public View {
   const int default_transport_protocol=Protocol::UDP;
 #ifdef LFL_EMSCRIPTEN
   const int local_transport_protocol=Protocol::InProcess;
@@ -318,7 +318,7 @@ struct MyGameWindow : public GUI {
   GameMenuGUI *menubar=0;
   GameChatGUI *chat=0;
   GamePlayerListGUI *playerlist=0;
-  TeamSelectGUI *team_select=0;
+  TeamSelectView *team_select=0;
   GameMultiTouchControls *touchcontrols=0;
   vector<string> save_settings = {"player_name", "first_run", "msens"};
   unsigned fb_tex1=0, fb_tex2=0;
@@ -327,7 +327,7 @@ struct MyGameWindow : public GUI {
   bool draw_skybox_only=0;
   FrameBuffer framebuffer;
   Color home_goal_color, away_goal_color;
-  HelperGUI *helper=0;
+  HelperView *helper=0;
   Entity *star_particles, *ball_particles;
   BallTrails ball_trail;
   ShootingStars shooting_stars;
@@ -336,7 +336,7 @@ struct MyGameWindow : public GUI {
   SpaceballTeam *home_team=0, *away_team=0;
   Skybox skybox;
 
-  MyGameWindow(Window *W) : GUI(W), framebuffer(W->gd), ball_trail("BallTrails", true, .05, .05, 0, 0),
+  MyGameWindow(Window *W) : View(W), framebuffer(W->gd), ball_trail("BallTrails", true, .05, .05, 0, 0),
   shooting_stars("ShootingStars", true, .1, .2, 0, 0), fireworks("Fireworks", true)
   {
     // field
@@ -386,15 +386,15 @@ struct MyGameWindow : public GUI {
     fireworks.pos_transform = &fireworks_positions;
     fireworks.rand_color = true;
 
-    menubar = W->AddGUI(make_unique<GameMenuGUI>(W, FLAGS_master.c_str(), FLAGS_default_port, &app->asset("title")->tex));
+    menubar = W->AddView(make_unique<GameMenuGUI>(W, FLAGS_master.c_str(), FLAGS_default_port, &app->asset("title")->tex));
     menubar->EnableParticles(&scene.cam, &app->asset("glow")->tex);
     menubar->tab3_player_name.AssignInput(FLAGS_player_name);
     menubar->settings = &sbsettings;
     menubar->Activate();
     menubar->selected = 1;
-    W->gui.push_back(&menubar->topbar);
-    playerlist = W->AddGUI(make_unique<GamePlayerListGUI>(W, "Spaceball 6006", "Team 1: silver", "Team 2: ontario"));
-    team_select = W->AddGUI(make_unique<TeamSelectGUI>(W));
+    W->view.push_back(&menubar->topbar);
+    playerlist = W->AddView(make_unique<GamePlayerListGUI>(W, "Spaceball 6006", "Team 1: silver", "Team 2: ontario"));
+    team_select = W->AddView(make_unique<TeamSelectView>(W));
 
     chat = new GameChatGUI(root, 't', reinterpret_cast<GameClient**>(&server));
     chat->Write("Enter to grab mouse");
@@ -415,19 +415,19 @@ struct MyGameWindow : public GUI {
 
     if (FLAGS_multitouch) {
       touchcontrols = new GameMultiTouchControls(server);
-      helper = new HelperGUI(root);
+      helper = new HelperView(root);
       point space(W->width*.02, W->height*.05);
       const Box &lw = touchcontrols->lpad_win, &rw = touchcontrols->rpad_win;
-      helper->AddLabel(Box(lw.x + lw.w*.15, lw.y + lw.h*.5,  1, 1), "move left",     HelperGUI::Hint::UPLEFT,  space);
-      helper->AddLabel(Box(lw.x + lw.w*.85, lw.y + lw.h*.5,  1, 1), "move right",    HelperGUI::Hint::UPRIGHT, space);
-      helper->AddLabel(Box(lw.x + lw.w*.5,  lw.y + lw.h*.85, 1, 1), "move forward",  HelperGUI::Hint::UP,      space);
-      helper->AddLabel(Box(lw.x + lw.w*.5,  lw.y + lw.h*.15, 1, 1), "move back",     HelperGUI::Hint::DOWN,    space);
-      helper->AddLabel(Box(rw.x + rw.w*.15, rw.y + rw.h*.5,  1, 1), "turn left",     HelperGUI::Hint::UPLEFT,  space);
-      helper->AddLabel(Box(rw.x + rw.w*.85, rw.y + rw.h*.5,  1, 1), "turn right",    HelperGUI::Hint::UPRIGHT, space);
-      helper->AddLabel(Box(rw.x + rw.w*.5,  rw.y + rw.h*.85, 1, 1), "burst forward", HelperGUI::Hint::UP,      space);
-      helper->AddLabel(Box(rw.x + rw.w*.5,  rw.y + rw.h*.15, 1, 1), "change player", HelperGUI::Hint::DOWN,    space);
-      helper->AddLabel(Box(W->width*(W->multitouch_keyboard_x + .035), W->height*.025, 1, 1), "keyboard", HelperGUI::Hint::UPLEFT, space);
-      helper->AddLabel(menubar->topbar.box, "options menu", HelperGUI::Hint::DOWN, point(space.x, W->height*.15));
+      helper->AddLabel(Box(lw.x + lw.w*.15, lw.y + lw.h*.5,  1, 1), "move left",     HelperView::Hint::UPLEFT,  space);
+      helper->AddLabel(Box(lw.x + lw.w*.85, lw.y + lw.h*.5,  1, 1), "move right",    HelperView::Hint::UPRIGHT, space);
+      helper->AddLabel(Box(lw.x + lw.w*.5,  lw.y + lw.h*.85, 1, 1), "move forward",  HelperView::Hint::UP,      space);
+      helper->AddLabel(Box(lw.x + lw.w*.5,  lw.y + lw.h*.15, 1, 1), "move back",     HelperView::Hint::DOWN,    space);
+      helper->AddLabel(Box(rw.x + rw.w*.15, rw.y + rw.h*.5,  1, 1), "turn left",     HelperView::Hint::UPLEFT,  space);
+      helper->AddLabel(Box(rw.x + rw.w*.85, rw.y + rw.h*.5,  1, 1), "turn right",    HelperView::Hint::UPRIGHT, space);
+      helper->AddLabel(Box(rw.x + rw.w*.5,  rw.y + rw.h*.85, 1, 1), "burst forward", HelperView::Hint::UP,      space);
+      helper->AddLabel(Box(rw.x + rw.w*.5,  rw.y + rw.h*.15, 1, 1), "change player", HelperView::Hint::DOWN,    space);
+      helper->AddLabel(Box(W->width*(W->multitouch_keyboard_x + .035), W->height*.025, 1, 1), "keyboard", HelperView::Hint::UPLEFT, space);
+      helper->AddLabel(menubar->topbar.box, "options menu", HelperView::Hint::DOWN, point(space.x, W->height*.15));
     }
   }
 
@@ -613,11 +613,11 @@ struct MyGameWindow : public GUI {
       // iPhoneKeyboardButton.Draw(mobile_font, 5);
 
       // Game menu and player list buttons
-      // static Widget::Button gamePlayerListButton(root, 0, 0, Box::FromScreen(.465, .05, .07, .05), MouseController::CB(bind(&GUI::ToggleDisplay, (GUI*)playerlist)));
-      // static Widget::Button           helpButton(root, 0, 0, Box::FromScreen(.56,  .05, .07, .05), MouseController::CB(bind(&GUI::ToggleDisplay, (GUI*)helper)));
+      // static Widget::Button gamePlayerListButton(root, 0, 0, Box::FromScreen(.465, .05, .07, .05), MouseController::CB(bind(&View::ToggleDisplay, (View*)playerlist)));
+      // static Widget::Button           helpButton(root, 0, 0, Box::FromScreen(.56,  .05, .07, .05), MouseController::CB(bind(&View::ToggleDisplay, (View*)helper)));
 
-      // if (helper && gamePlayerListButton.init) helper->AddLabel(gamePlayerListButton.win, "player list", HelperGUI::Hint::UP, .08);
-      // if (helper &&           helpButton.init) helper->AddLabel(          helpButton.win, "help",        HelperGUI::Hint::UPRIGHT);
+      // if (helper && gamePlayerListButton.init) helper->AddLabel(gamePlayerListButton.win, "player list", HelperView::Hint::UP, .08);
+      // if (helper &&           helpButton.init) helper->AddLabel(          helpButton.win, "help",        HelperView::Hint::UPRIGHT);
       // gamePlayerListButton.Draw(mobile_font, 4);
       // helpButton.Draw(mobile_font, 6);
     }
@@ -758,8 +758,8 @@ void MyWindowInit(Window *W) {
 }
 
 void MyWindowStart(Window *W) {
-  CHECK_EQ(0, W->NewGUI());
-  MyGameWindow *game_gui = W->ReplaceGUI(0, make_unique<MyGameWindow>(W));
+  CHECK_EQ(0, W->NewView());
+  MyGameWindow *game_gui = W->ReplaceView(0, make_unique<MyGameWindow>(W));
   W->frame_cb = bind(&MyGameWindow::Frame, game_gui, _1, _2, _3);
   if (FLAGS_console) W->InitConsole(Callback());
 
@@ -801,7 +801,7 @@ void MyWindowStart(Window *W) {
   binds->Add(Key::LeftShift,  Bind::TimeCB(bind(&Entity::RollLeft,   &game_gui->scene.cam, _1)));
   binds->Add(Key::Space,      Bind::TimeCB(bind(&Entity::RollRight,  &game_gui->scene.cam, _1)));
 #endif
-  binds->Add(Key::Tab,        Bind::TimeCB(bind(&GUI::Activate, game_gui->playerlist)));
+  binds->Add(Key::Tab,        Bind::TimeCB(bind(&View::Activate, game_gui->playerlist)));
   binds->Add(Key::F1,         Bind::CB(bind(&GameClient::SetCamera,  game_gui->server,  vector<string>(1, string("1")))));
   binds->Add(Key::F2,         Bind::CB(bind(&GameClient::SetCamera,  game_gui->server,  vector<string>(1, string("2")))));
   binds->Add(Key::F3,         Bind::CB(bind(&GameClient::SetCamera,  game_gui->server,  vector<string>(1, string("3")))));
@@ -921,7 +921,7 @@ extern "C" int MyAppMain() {
   shipred->color = shipblue->color = true;
 
   app->StartNewWindow(app->focused);
-  MyGameWindow *game_gui = app->focused->GetOwnGUI<MyGameWindow>(0);
+  MyGameWindow *game_gui = app->focused->GetOwnView<MyGameWindow>(0);
 
   // add reflection to ball
   Asset *ball = app->asset("ball"), *sky = game_gui->skybox.asset();
