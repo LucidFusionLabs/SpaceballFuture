@@ -1,5 +1,19 @@
 # $Id: CMakeLists.txt 1320 2014-10-26 08:12:52Z justin $
 
+if(LFL_IOS)
+  set(CRASHREPORTING_LIB app_fabric_crashreporting)
+else()
+  set(CRASHREPORTING_LIB app_null_crashreporting)
+endif()
+
+if(LFL_MOBILE)
+  set(BILLING_LIB ${LFL_APP_BILLING})
+  set(ADVERTISING_LIB ${LFL_APP_ADVERTISING})
+else()
+  set(BILLING_LIB app_null_billing)
+  set(ADVERTISING_LIB app_null_advertising)
+endif()
+
 lfl_set_os_toolkit(SPACEBALL)
 lfl_project(SpaceballFuture)
 
@@ -23,7 +37,7 @@ lfl_add_package(SpaceballFuture SOURCES spaceball.cpp
                 LINK_LIBRARIES ${LFL_APP_LIB} game ${SPACEBALL_FRAMEWORK} ${SPACEBALL_GRAPHICS}
                 ${LFL_APP_AUDIO} app_null_camera app_null_matrix app_null_fft
                 ${LFL_APP_GAME_LOADER} app_stb_ogg ${LFL_APP_CONVERT} app_null_css ${LFL_APP_FONT}
-                app_null_ssl app_null_tu app_null_js app_null_crashreporting
+                app_null_ssl app_null_tu app_null_js ${BILLING_LIB} ${ADVERTISING_LIB} ${CRASHREPORTING_LIB}
                 ${BOX2D_LIB} ${SPACEBALL_TOOLKIT} ${LFL_APP_OS}
                 ASSET_FILES ${LFL_APP_ASSET_FILES} ${CMAKE_CURRENT_SOURCE_DIR}/assets/*
                 LIB_FILES ${LFL_APP_LIB_FILES} ${SPACEBALL_LIB_FILES})

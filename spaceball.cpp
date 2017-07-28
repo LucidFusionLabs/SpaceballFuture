@@ -238,13 +238,14 @@ struct TeamSelectView : public View {
   Widget::Button start_button;
   vector<Widget::Button> team_buttons;
   int home_team=0, away_team=0;
+  Widget::Slider slider;
 
   TeamSelectView(Window *W) : View(W), teams(SpaceballTeam::GetList()),
   font       (FontDesc(FLAGS_font,                 "", 8, Color::grey80)),
   bright_font(FontDesc(FLAGS_font,                 "", 8, Color::white)),
   glow_font  (FontDesc(StrCat(FLAGS_font, "Glow"), "", 8, Color::white)),
   team_font  (FontDesc("sbmaps")),
-  start_button(this, 0, "start", MouseController::CB(bind(&TeamSelectView::Start, this))) {
+  start_button(this, 0, "start", MouseController::CB(bind(&TeamSelectView::Start, this))), slider(this) {
     start_button.outline_topleft     = &Color::grey80;
     start_button.outline_bottomright = &Color::grey40;
     start_button.solid = &Color::grey60;
@@ -296,6 +297,7 @@ struct TeamSelectView : public View {
     start_button.box = root->Box(.4, .05);
     start_button.Layout(&flow, bright_font);
     flow.Complete();
+    slider.LayoutAttached(Box(0, -box.h, box.w, box.h));
   }
 };
 

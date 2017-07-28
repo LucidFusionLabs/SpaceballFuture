@@ -3,13 +3,11 @@
 <plist version="1.0">
 <dict>
 	<key>CFBundleDevelopmentRegion</key>
-	<string>English</string>
+	<string>en</string>
 	<key>CFBundleDisplayName</key>
 	<string>SpaceballFuture</string>
 	<key>CFBundleExecutable</key>
 	<string>SpaceballFuture</string>
-	<key>CFBundleIconFile</key>
-	<string>icon</string>
 	<key>CFBundleIdentifier</key>
 	<string>com.lucidfusionlabs.SpaceballFuture</string>
 	<key>CFBundleInfoDictionaryVersion</key>
@@ -24,5 +22,67 @@
 	<string>1.0.1</string>
 	<key>CFBundleVersion</key>
 	<string>1.0.1</string>
+  <key>CFBundleSupportedPlatforms</key>
+  <array>
+    <string>iPhoneOS</string>
+  </array>
+  <key>CFBundleIcons</key>
+  <dict>
+    <key>CFBundlePrimaryIcon</key>
+    <dict>
+      <key>CFBundleIconFiles</key>
+      <array>
+        <string>AppIcon20x20</string>
+        <string>AppIcon29x29</string>
+        <string>AppIcon40x40</string>
+        <string>AppIcon60x60</string>
+      </array>
+    </dict>
+  </dict>
+  <key>CFBundleIcons~ipad</key>
+  <dict>
+    <key>CFBundlePrimaryIcon</key>
+    <dict>
+      <key>CFBundleIconFiles</key>
+      <array>
+        <string>AppIcon20x20</string>
+        <string>AppIcon29x29</string>
+        <string>AppIcon40x40</string>
+        <string>AppIcon60x60</string>
+        <string>AppIcon76x76</string>
+        <string>AppIcon83.5x83.5</string>
+      </array>
+    </dict>
+  </dict>
+  <key>LSRequiresIPhoneOS</key>
+  <true/>
+  <key>MinimumOSVersion</key>
+  <string>8.0</string>
+  <key>UILaunchStoryboardName</key>
+  <string>LaunchScreen</string>
+  <key>UIViewControllerBasedStatusBarAppearance</key>
+  <true/>
+  <key>UISupportedInterfaceOrientations</key>
+  <array>
+    <string>UIInterfaceOrientationLandscapeLeft</string>
+  </array>
+  <key>UISupportedInterfaceOrientations~ipad</key>
+  <array>
+    <string>UIInterfaceOrientationLandscapeLeft</string>
+  </array>
+  <key>Fabric</key>
+  <dict>
+    <key>APIKey</key>
+    <string>b8bfc53a14ff223e3cf7df5039c377bdac3ca074</string>
+    <key>Kits</key>
+    <array>
+      <dict>
+        <key>KitInfo</key>
+        <dict/>
+        <key>KitName</key>
+        <string>Crashlytics</string>
+      </dict>
+    </array>
+  </dict>
 </dict>
 </plist>
