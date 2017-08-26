@@ -16,7 +16,8 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "core/app/gui.h"
+#include "core/app/gl/view.h"
+#include "core/app/gl/toolkit.h"
 #include "core/app/network.h"
 #include "core/web/browser.h"
 #include "core/game/game.h"
@@ -235,22 +236,25 @@ struct SpaceballClient : public GameClient {
 struct TeamSelectView : public View {
   vector<SpaceballTeam> *teams;
   FontRef font, bright_font, glow_font, team_font;
-  Widget::Button start_button;
-  vector<Widget::Button> team_buttons;
+  unique_ptr<ToolbarViewInterface> start_button;
+  unique_ptr<CollectionViewInterface> team_select;
   int home_team=0, away_team=0;
-  Widget::Slider slider;
 
   TeamSelectView(Window *W) : View(W), teams(SpaceballTeam::GetList()),
-  font       (FontDesc(FLAGS_font,                 "", 8, Color::grey80)),
-  bright_font(FontDesc(FLAGS_font,                 "", 8, Color::white)),
-  glow_font  (FontDesc(StrCat(FLAGS_font, "Glow"), "", 8, Color::white)),
-  team_font  (FontDesc("sbmaps")),
-  start_button(this, 0, "start", MouseController::CB(bind(&TeamSelectView::Start, this))), slider(this) {
-    start_button.outline_topleft     = &Color::grey80;
-    start_button.outline_bottomright = &Color::grey40;
-    start_button.solid = &Color::grey60;
-    team_buttons.resize(teams->size());
-    home_team = Rand(size_t(0), team_buttons.size()-1);
+    font       (FontDesc(FLAGS_font,                 "", 8, Color::grey80)),
+    bright_font(FontDesc(FLAGS_font,                 "", 8, Color::white)),
+    glow_font  (FontDesc(StrCat(FLAGS_font, "Glow"), "", 8, Color::white)),
+    team_font  (FontDesc("sbmaps")),
+    start_button(app->toolkit->CreateToolbar("Light", MenuItemVec{
+      { "start", "", bind(&TeamSelectView::Start, this) }, }, 0))
+  {
+    vector<CollectionItem> items;
+    for (int i=0, l=teams->size(); i != l; ++i) {
+      // loadSystemIcon fromGlyph: team_font->FindGlyph((*teams)[i].font_index)
+      items.emplace_back((*teams)[i].name, 0, bind(&TeamSelectView::SetHomeTeamIndex, this, i));
+    }
+    team_select = app->toolkit->CreateCollectionView("Select Team", "", "Clear", move(items));
+    home_team = Rand(size_t(0), teams->size()-1);
   }
 
   void SetHomeTeamIndex(int n) { home_team = n; child_box.Clear(); }
@@ -260,44 +264,14 @@ struct TeamSelectView : public View {
     GraphicsContext gc(root->gd);
     glShadertoyShaderWindows(gc.gd, MyShader, Color(25, 60, 130, 120), box);
     View::Draw();
-    gc.gd->SetColor(Color::white);
-    gc.gd->SetColor(Color::grey20); BoxTopLeftOutline    ().Draw(&gc, team_buttons[home_team].GetHitBoxBox());
-    gc.gd->SetColor(Color::grey60); BoxBottomRightOutline().Draw(&gc, team_buttons[home_team].GetHitBoxBox());
-    gc.gd->SetColor(Color::grey80); BoxTopLeftOutline    ().Draw(&gc, box);
-    gc.gd->SetColor(Color::grey40); BoxBottomRightOutline().Draw(&gc, box);
   }
 
   void Layout() {
-    CHECK(font.Load() && bright_font.Load() && glow_font.Load() && team_font.Load());
-    for (int i=0; i<team_buttons.size(); i++) {
-      team_buttons[i] =
-        Widget::Button(this, team_font->FindGlyph((*teams)[i].font_index), (*teams)[i].name,
-                       MouseController::CB(bind(&TeamSelectView::SetHomeTeamIndex, this, i)));
-      team_buttons[i].outline_w = 1;
-      team_buttons[i].outline_topleft     = &Color::grey60;
-      team_buttons[i].outline_bottomright = &Color::grey20;
-    }
-
     box = root->Box(.1, .1, .8, .8);
     int bw=box.w*2/13.0, bh=bw, sx=bw/2, px=(box.w - (bw*4 + sx*3))/2;
     Flow flow(&box, font, ResetView());
-    flow.AppendNewlines(1);
-    flow.p.x += px;
-    for (int i = 0; i < team_buttons.size(); i++) {
-      team_buttons[i].v_align = VAlign::Bottom;
-      team_buttons[i].box = Box(bw, bh);
-      team_buttons[i].Layout(&flow, home_team == i ? glow_font : font);
-      flow.p.x += sx;
-
-      if ((i+1) % 4 != 0) continue;
-      flow.AppendNewlines(2);
-      if (i+1 < team_buttons.size()) flow.p.x += px;
-    }
-    flow.layout.align_center = 1;
-    start_button.box = root->Box(.4, .05);
-    start_button.Layout(&flow, bright_font);
+    if (auto v = team_select->AppendFlow(&flow)) child_view.push_back(v);
     flow.Complete();
-    slider.LayoutAttached(Box(0, -box.h, box.w, box.h));
   }
 };
 
@@ -388,12 +362,11 @@ struct MyGameWindow : public View {
     fireworks.pos_transform = &fireworks_positions;
     fireworks.rand_color = true;
 
-    menubar = W->AddView(make_unique<GameMenuGUI>(W, FLAGS_master.c_str(), FLAGS_default_port, &app->asset("title")->tex));
+    menubar = W->AddView(make_unique<GameMenuGUI>(W, FLAGS_master.c_str(), FLAGS_default_port, &sbsettings, &app->asset("title")->tex));
     menubar->EnableParticles(&scene.cam, &app->asset("glow")->tex);
-    menubar->tab3_player_name.AssignInput(FLAGS_player_name);
-    menubar->settings = &sbsettings;
+    // menubar->tab3_player_name.AssignInput(FLAGS_player_name);
     menubar->Activate();
-    menubar->selected = 1;
+    menubar->toplevel->selected = 0;
     W->view.push_back(&menubar->topbar);
     playerlist = W->AddView(make_unique<GamePlayerListGUI>(W, "Spaceball 6006", "Team 1: silver", "Team 2: ontario"));
     team_select = W->AddView(make_unique<TeamSelectView>(W));
@@ -407,7 +380,7 @@ struct MyGameWindow : public View {
     server->map_changed_cb = bind(&MyGameWindow::HandleMapChanged, this, _1, _2, _3);
 
     // init frame buffer
-    framebuffer.Create(W->width, W->height, FrameBuffer::Flag::CreateTexture | FrameBuffer::Flag::ReleaseFB);
+    framebuffer.Create(W->gl_w, W->gl_h, FrameBuffer::Flag::CreateTexture | FrameBuffer::Flag::ReleaseFB);
     fb_tex1 = framebuffer.tex.ID;
     framebuffer.AllocTexture(&fb_tex2);
 
@@ -418,7 +391,7 @@ struct MyGameWindow : public View {
     if (FLAGS_multitouch) {
       touchcontrols = new GameMultiTouchControls(server);
       helper = new HelperView(root);
-      point space(W->width*.02, W->height*.05);
+      point space(W->gl_w*.02, W->gl_h*.05);
       const Box &lw = touchcontrols->lpad_win, &rw = touchcontrols->rpad_win;
       helper->AddLabel(Box(lw.x + lw.w*.15, lw.y + lw.h*.5,  1, 1), "move left",     HelperView::Hint::UPLEFT,  space);
       helper->AddLabel(Box(lw.x + lw.w*.85, lw.y + lw.h*.5,  1, 1), "move right",    HelperView::Hint::UPRIGHT, space);
@@ -428,8 +401,8 @@ struct MyGameWindow : public View {
       helper->AddLabel(Box(rw.x + rw.w*.85, rw.y + rw.h*.5,  1, 1), "turn right",    HelperView::Hint::UPRIGHT, space);
       helper->AddLabel(Box(rw.x + rw.w*.5,  rw.y + rw.h*.85, 1, 1), "burst forward", HelperView::Hint::UP,      space);
       helper->AddLabel(Box(rw.x + rw.w*.5,  rw.y + rw.h*.15, 1, 1), "change player", HelperView::Hint::DOWN,    space);
-      helper->AddLabel(Box(W->width*(W->multitouch_keyboard_x + .035), W->height*.025, 1, 1), "keyboard", HelperView::Hint::UPLEFT, space);
-      helper->AddLabel(menubar->topbar.box, "options menu", HelperView::Hint::DOWN, point(space.x, W->height*.15));
+      helper->AddLabel(Box(W->gl_w*(W->multitouch_keyboard_x + .035), W->gl_h*.025, 1, 1), "keyboard", HelperView::Hint::UPLEFT, space);
+      helper->AddLabel(menubar->topbar.box, "options menu", HelperView::Hint::DOWN, point(space.x, W->gl_h*.15));
     }
   }
 
@@ -461,8 +434,8 @@ struct MyGameWindow : public View {
     }
 
     SpaceballGame *world = builtin_server->World();
-    if (menubar->selected == 1) world->game_players = SpaceballSettings::PLAYERS_SINGLE;
-    else                        world->game_players = SpaceballSettings::PLAYERS_MULTIPLE;
+    if (menubar->toplevel->selected == 0) world->game_players = SpaceballSettings::PLAYERS_SINGLE;
+    else                                  world->game_players = SpaceballSettings::PLAYERS_MULTIPLE;
     world->game_type = sbsettings.GetIndex(SpaceballSettings::GAME_TYPE);
     world->game_limit = sbsettings.GetIndex(SpaceballSettings::GAME_LIMIT);
     world->game_control = sbsettings.GetIndex(SpaceballSettings::GAME_CONTROL);
@@ -491,7 +464,7 @@ struct MyGameWindow : public View {
     server->Reset();
 
     if (world->game_type == SpaceballSettings::TYPE_TOURNAMENT) team_select->active = true;
-    else { menubar->Activate(); menubar->selected = 1; }
+    else { menubar->Activate(); menubar->toplevel->selected = 0; }
 
     SetInitialCameraPosition(&scene.cam);
   }
@@ -635,14 +608,14 @@ struct MyGameWindow : public View {
         scene.cam.ort = ort;
       }
 
-      Box win(W->width*.4, W->height*.8, W->width*.2, W->height*.1, false);
+      Box win(W->gl_w*.4, W->gl_h*.8, W->gl_w*.2, W->gl_h*.1, false);
       Asset *goal = app->asset("goal");
       goal->tex.Bind();
       gc.DrawTexturedBox(win, goal->tex.coord);
 
       static Font *font = app->fonts->Get(FLAGS_font, "", 16);
       font->Draw(StrCat(server->last_scored_PlayerName, " scores"),
-                 Box(win.x, win.y - W->height*.1, W->width*.2, W->height*.1, false), 
+                 Box(win.x, win.y - W->gl_h*.1, W->gl_w*.2, W->gl_h*.1, false), 
                  0, Font::DrawFlag::AlignCenter | Font::DrawFlag::NoWrap);
 
       bool home_team_scored = server->last_scored_team == Game::Team::Home;
@@ -652,15 +625,15 @@ struct MyGameWindow : public View {
         if (fireworks.particles[i].dead) continue;
         fireworks.particles[i].InitColor();
       }
-      fireworks_positions[0].set(-W->width*.2, W->height*.8, 0);
-      fireworks_positions[1].set(-W->width*.8, W->height*.8, 0);
+      fireworks_positions[0].set(-W->gl_w*.2, W->gl_h*.8, 0);
+      fireworks_positions[1].set(-W->gl_w*.8, W->gl_h*.8, 0);
       fireworks.Update(&scene.cam, clicks, 0, 0, 0);
       fireworks.Draw(gc.gd);
       scene.Select(gc.gd);
     }
 
     if (server->gameover.enabled()) {
-      Box win(W->width*.4, W->height*.9, W->width*.2, W->height*.1, false);
+      Box win(W->gl_w*.4, W->gl_h*.9, W->gl_w*.2, W->gl_h*.1, false);
       static Font *font = app->fonts->Get(FLAGS_font, "", 16);
       font->Draw(StrCat(server->gameover.start_ind == SpaceballGame::Team::Home ? home_team->name : away_team->name, " wins"),
                  win, 0, Font::DrawFlag::AlignCenter);
@@ -699,9 +672,9 @@ struct MyGameWindow : public View {
 
     gc.gd->EnableBlend();
     static Font *text = app->fonts->Get(FLAGS_font, "", 8);
-    if (FLAGS_draw_fps)   text->Draw(StringPrintf("FPS = %.2f", root->fps.FPS()),      point(W->width*.05, W->height*.05));
-    if (!menubar->active) text->Draw(intervalminutes(Now() - map_started),             point(W->width*.93, W->height*.97));
-    if (!menubar->active) text->Draw(StrCat(home_team->name, " vs ", away_team->name), point(W->width*.01, W->height*.97));
+    if (FLAGS_draw_fps)   text->Draw(StringPrintf("FPS = %.2f", root->fps.FPS()),      point(W->gl_w*.05, W->gl_h*.05));
+    if (!menubar->active) text->Draw(intervalminutes(Now() - map_started),             point(W->gl_w*.93, W->gl_h*.97));
+    if (!menubar->active) text->Draw(StrCat(home_team->name, " vs ", away_team->name), point(W->gl_w*.01, W->gl_h*.97));
 
     return 0;
   }
@@ -792,17 +765,21 @@ void MyWindowStart(Window *W) {
   binds->Add('q',             Bind::TimeCB(bind(&GameClient::MoveDown,  game_gui->server, _1)));
   binds->Add('e',             Bind::TimeCB(bind(&GameClient::MoveUp,    game_gui->server, _1)));
 #endif
-#ifndef LFL_MOBILE
+
+#ifdef LFL_MOBILE
+  app->ShowSystemStatusBar(false);
+#else
   binds->Add(Mouse::Button::_1, Bind::TimeCB(bind(&SpaceballClient::MoveBoost, game_gui->server, _1)));
 #endif
-#ifdef LFL_EMSCRIPTEN
-  W->grabbed_pitch_cb = function<void(int)>();
+
+#if 1
   binds->move_cb = bind(&Entity::MovePitchCB, &game_gui->scene.cam, _1, _2);
 #else
   binds->move_cb = bind(&Entity::MoveCB, &game_gui->scene.cam, _1, _2);
   binds->Add(Key::LeftShift,  Bind::TimeCB(bind(&Entity::RollLeft,   &game_gui->scene.cam, _1)));
   binds->Add(Key::Space,      Bind::TimeCB(bind(&Entity::RollRight,  &game_gui->scene.cam, _1)));
 #endif
+
   binds->Add(Key::Tab,        Bind::TimeCB(bind(&View::Activate, game_gui->playerlist)));
   binds->Add(Key::F1,         Bind::CB(bind(&GameClient::SetCamera,  game_gui->server,  vector<string>(1, string("1")))));
   binds->Add(Key::F2,         Bind::CB(bind(&GameClient::SetCamera,  game_gui->server,  vector<string>(1, string("2")))));
@@ -828,22 +805,22 @@ extern "C" void MyAppCreate(int argc, const char* const* argv) {
   FLAGS_font_flag = FLAGS_console_font_flag = 0;
   FLAGS_enable_audio = FLAGS_enable_video = FLAGS_enable_input = FLAGS_enable_network = FLAGS_console = 1;
   FLAGS_depth_buffer_bits = 16;
-  app = new Application(argc, argv);
-  app->focused = Window::Create();
+  app = CreateApplication(argc, argv);
   my_app = new MyAppState();
+  app->focused = Window::Create();
   app->name = "Spaceball";
   app->window_start_cb = MyWindowStart;
   app->window_init_cb = MyWindowInit;
   app->window_init_cb(app->focused);
   // app->exit_cb = []{ delete my_app; };
 #ifdef LFL_MOBILE
+  app->SetExtraScale(true);
   app->SetTitleBar(false);
   app->SetKeepScreenOn(true);
-  FLAGS_target_fps = 30;
-  app->focused->SetBox(Box(420, 380));
+  FLAGS_target_fps = app->focused->target_fps = 30;
 #else
-  FLAGS_target_fps = 60;
-  app->focused->SetBox(Box(840, 760));
+  FLAGS_target_fps = app->focused->target_fps = 60;
+  app->focused->SetBox(point(840, 760), Box(840, 760));
 #endif
 }
 

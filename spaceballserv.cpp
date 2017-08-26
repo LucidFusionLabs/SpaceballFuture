@@ -17,7 +17,8 @@
  */
 
 #include "core/app/app.h"
-#include "core/app/gui.h"
+#include "core/app/gl/view.h"
+#include "core/app/gl/toolkit.h"
 #include "core/app/ipc.h"
 #include "core/web/browser.h"
 #include "core/game/game.h"

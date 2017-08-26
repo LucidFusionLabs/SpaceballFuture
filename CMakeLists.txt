@@ -37,8 +37,8 @@ lfl_add_package(SpaceballFuture SOURCES spaceball.cpp
                 LINK_LIBRARIES ${LFL_APP_LIB} game ${SPACEBALL_FRAMEWORK} ${SPACEBALL_GRAPHICS}
                 ${LFL_APP_AUDIO} app_null_camera app_null_matrix app_null_fft
                 ${LFL_APP_GAME_LOADER} app_stb_ogg ${LFL_APP_CONVERT} app_null_css ${LFL_APP_FONT}
-                app_null_ssl app_null_tu app_null_js ${BILLING_LIB} ${ADVERTISING_LIB} ${CRASHREPORTING_LIB}
-                ${BOX2D_LIB} ${SPACEBALL_TOOLKIT} ${LFL_APP_OS}
+                app_null_ssl app_null_tu app_null_js ${BILLING_LIB} ${ADVERTISING_LIB} ${LFL_APP_NAG}
+                ${CRASHREPORTING_LIB} ${BOX2D_LIB} ${SPACEBALL_TOOLKIT} ${LFL_APP_OS}
                 ASSET_FILES ${LFL_APP_ASSET_FILES} ${CMAKE_CURRENT_SOURCE_DIR}/assets/*
                 LIB_FILES ${LFL_APP_LIB_FILES} ${SPACEBALL_LIB_FILES})
 lfl_post_build_start(SpaceballFuture)

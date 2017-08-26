@@ -150,17 +150,17 @@ struct SpaceballGame : public Game {
       FieldDefinition *fd = FieldDefinition::get();
       float ypos = fd->B.y + Ship::radius().y * .7;
       static StartPositions inst = {
-        v3(0,            ypos, fd->B.z * .9),
-        v3(fd->B.x * .6, ypos, fd->B.z * .65),
-        v3(fd->C.x * .6, ypos, fd->C.z * .65),
-        v3(fd->B.x * .6, ypos, fd->B.z * .3),
-        v3(fd->C.x * .6, ypos, fd->C.z * .3),
+        { v3(0,            ypos, fd->B.z * .9),
+          v3(fd->B.x * .6, ypos, fd->B.z * .65),
+          v3(fd->C.x * .6, ypos, fd->C.z * .65),
+          v3(fd->B.x * .6, ypos, fd->B.z * .3),
+          v3(fd->C.x * .6, ypos, fd->C.z * .3) },
 
-        v3(0,            ypos, fd->F.z * .9),
-        v3(fd->F.x * .6, ypos, fd->F.z * .65),
-        v3(fd->G.x * .6, ypos, fd->G.z * .65),
-        v3(fd->F.x * .6, ypos, fd->F.z * .3),
-        v3(fd->G.x * .6, ypos, fd->G.z * .3)
+        { v3(0,            ypos, fd->F.z * .9),
+          v3(fd->F.x * .6, ypos, fd->F.z * .65),
+          v3(fd->G.x * .6, ypos, fd->G.z * .65),
+          v3(fd->F.x * .6, ypos, fd->F.z * .3),
+          v3(fd->G.x * .6, ypos, fd->G.z * .3) }
       };
       return &inst;
     }
