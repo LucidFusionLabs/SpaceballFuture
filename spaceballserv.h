@@ -1,5 +1,5 @@
 /*
- * $Id: spaceballserv.h 1314 2014-10-16 04:43:45Z justin $
+ * $Id$
  * Copyright (C) 2009 Lucid Fusion Labs
 
  * This program is free software: you can redistribute it and/or modify
@@ -274,15 +274,15 @@ struct SpaceballGame : public Game {
     return ret;
   }
 
-  Entity *NewSpectator(EntityID id, int team) { return Add(id, new Ship(app->asset("ship"), 0, v3(), v3(0,0,1), v3(0,1,0), 0)); }
+  Entity *NewSpectator(EntityID id, int team) { return Add(id, make_unique<Ship>(app->asset("ship"), nullptr, v3(), v3(0,0,1), v3(0,1,0), 0)); }
   Entity *NewShip(EntityID id, int team) {
     bool red = team == Team::Home;
     v3 ort = StartOrientation(team);
     v3 pos = StartPosition(team, &red_startindex, &blue_startindex);
     void *body = physics->AddBox(Ship::radius(), pos, ort, Ship::mass(), Physics::CollidesWith(ShipBit, BallBit));
-    Ship *ship = new Ship(app->asset(red ? "shipred" : "shipblue"), body, pos, ort, v3(0,1,0), StartPositions::get()->blue[0].y);
-    AssignShipColor(ship, red ? home : away);
-    Entity *ret = Add(id, ship);
+    auto ship = make_unique<Ship>(app->asset(red ? "shipred" : "shipblue"), body, pos, ort, v3(0,1,0), StartPositions::get()->blue[0].y);
+    AssignShipColor(ship.get(), red ? home : away);
+    Entity *ret = Add(id, move(ship));
     physics->SetContinuous(ret, .001, Ship::radius().z - .001);
     return ret;
   }
@@ -290,7 +290,7 @@ struct SpaceballGame : public Game {
   Entity *NewBall(EntityID id) {
     void *body = physics->AddSphere(Ball::radius(), Ball::start_pos(), v3(0,0,1), Ball::mass(),
                                     Physics::CollidesWith(BallBit, WallBit|ShipBit));
-    Entity *ret = Add(id, new Ball(app->asset("ball"), body, Ball::start_pos(), v3(0,0,1)));
+    Entity *ret = Add(id, make_unique<Ball>(app->asset("ball"), body, Ball::start_pos(), v3(0,0,1)));
     physics->SetContinuous(ret, .001, Ball::radius() - .001);
     return ret;
   }
@@ -739,8 +739,8 @@ struct SpaceballBots : public GameBots {
 
 struct SpaceballServer : public GameServer {
   Scene scene;
-  SpaceballServer(const string &name, int framerate, const vector<Asset> *assets) :
-    GameServer(new SpaceballGame(&scene), 1000/framerate, name, assets) { World()->Init(); }
+  SpaceballServer(ApplicationShutdown *s, SocketServices *n, const string &name, int framerate, const vector<Asset> *assets) :
+    GameServer(s, n, new SpaceballGame(&scene), 1000/framerate, name, assets) { World()->Init(); }
 
   SpaceballGame *World() { return static_cast<SpaceballGame*>(world); }
   SpaceballBots *Bots() { return static_cast<SpaceballBots*>(bots); }

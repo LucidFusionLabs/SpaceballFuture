@@ -1,5 +1,5 @@
 /*
- * $Id: spaceball.cpp 1336 2014-12-08 09:29:59Z justin $
+ * $Id$
  * Copyright (C) 2009 Lucid Fusion Labs
 
  * This program is free software: you can redistribute it and/or modify
@@ -19,8 +19,13 @@
 #include "core/app/gl/view.h"
 #include "core/app/gl/toolkit.h"
 #include "core/app/network.h"
+#include "core/app/shell.h"
 #include "core/web/browser.h"
 #include "core/game/game.h"
+
+namespace LFL {
+Application *app=0;
+};
 
 #include "spaceballserv.h"
 
@@ -41,6 +46,7 @@ typedef SpaceballGame::Ball MyBall;
 struct MyAppState {
   TextureArray caust;
   Shader fadershader, warpshader, explodeshader;
+  MyAppState(GraphicsDeviceHolder *p) : fadershader(p), warpshader(p), explodeshader(p) {}
 } *my_app;
 
 Geometry *FieldGeometry(const Color &rg, const Color &bg, const Color &fc) {
@@ -96,7 +102,7 @@ Geometry *FieldLines(float tx, float ty) {
 }
 
 void ShipDraw(GraphicsDevice *gd, Asset *a, Entity *e) {
-  static unique_ptr<Geometry> stripes = Geometry::LoadOBJ(unique_ptr<File>(Asset::OpenFile("ship_stripes.obj")).get());
+  static unique_ptr<Geometry> stripes = Geometry::LoadOBJ(unique_ptr<File>(app->OpenFile("ship_stripes.obj")).get());
   Scene::Select(gd, stripes.get());
   gd->SetColor(e->color1);
   Scene::Draw(gd, stripes.get(), e);
@@ -114,20 +120,20 @@ void ShipDraw(GraphicsDevice *gd, Asset *a, Entity *e) {
   static Timer lightning_timer;
   static float last_lightning_offset = 0;
   static int lightning_texcoord_min_int_x = 0;
-  static Font *lightning_font = app->fonts->Get("lightning");
+  static Font *lightning_font = app->fonts->Get(app->focused->gl_h, "lightning");
   static Glyph *lightning_glyph = lightning_font->FindGlyph(2);
   static unique_ptr<Geometry> lightning_obj;
   if (!lightning_obj) {
     float lightning_glyph_texcoord[4];
     memcpy(lightning_glyph_texcoord, lightning_glyph->tex.coord, sizeof(lightning_glyph_texcoord));
     lightning_glyph_texcoord[Texture::maxx_coord_ind] *= .1;
-    lightning_obj = Geometry::LoadOBJ(unique_ptr<File>(Asset::OpenFile("ship_lightning.obj")).get(),
+    lightning_obj = Geometry::LoadOBJ(unique_ptr<File>(app->OpenFile("ship_lightning.obj")).get(),
                                       lightning_glyph_texcoord);
   }
   gd->BindTexture(GraphicsDevice::Texture2D, lightning_glyph->tex.ID);
 
   float lightning_offset = (e->namehash % 11) / 10.0;
-  lightning_obj->ScrollTexCoord(-.4 * ToFSeconds(lightning_timer.GetTime(true)).count(),
+  lightning_obj->ScrollTexCoord(gd, -.4 * ToFSeconds(lightning_timer.GetTime(true)).count(),
                                 lightning_offset - last_lightning_offset,
                                 &lightning_texcoord_min_int_x);
   last_lightning_offset = lightning_offset;
@@ -153,7 +159,8 @@ struct SpaceballClient : public GameClient {
   string last_scored_PlayerName;
   vector<v3> thrusters_transform;
   function<void(const string&, const string&, int)> map_changed_cb;
-  SpaceballClient(Game *w, View *PlayerList, TextArea *Chat) : GameClient(w, PlayerList, Chat) {
+  SpaceballClient(AssetStore *a, SocketServices *n, Game *w, View *PlayerList, TextArea *Chat) :
+    GameClient(a, n, w, PlayerList, Chat) {
     thrusters_transform.push_back(v3(-.575, -.350, -.1));
     thrusters_transform.push_back(v3( .525, -.350, -.1));
     thrusters_transform.push_back(v3(-.025,  .525, -.1));
@@ -188,7 +195,7 @@ struct SpaceballClient : public GameClient {
 
   void AnimationChange(Entity *e, int NewID, int NewSeq) {
     static SoundAsset *bounce = app->soundasset("bounce");
-    if      (NewID == SpaceballGame::AnimShipBoost) { if (FLAGS_enable_audio) app->PlaySoundEffect(bounce, e->pos, e->vel); }
+    if      (NewID == SpaceballGame::AnimShipBoost) { if (FLAGS_enable_audio) app->audio->PlaySoundEffect(bounce, e->pos, e->vel); }
     else if (NewID == SpaceballGame::AnimExplode)   e->animation.Start(&my_app->explodeshader);
   }
 
@@ -241,11 +248,11 @@ struct TeamSelectView : public View {
   int home_team=0, away_team=0;
 
   TeamSelectView(Window *W) : View(W), teams(SpaceballTeam::GetList()),
-    font       (FontDesc(FLAGS_font,                 "", 8, Color::grey80)),
-    bright_font(FontDesc(FLAGS_font,                 "", 8, Color::white)),
-    glow_font  (FontDesc(StrCat(FLAGS_font, "Glow"), "", 8, Color::white)),
-    team_font  (FontDesc("sbmaps")),
-    start_button(app->toolkit->CreateToolbar("Light", MenuItemVec{
+    font       (W, FontDesc(FLAGS_font,                 "", 8, Color::grey80)),
+    bright_font(W, FontDesc(FLAGS_font,                 "", 8, Color::white)),
+    glow_font  (W, FontDesc(StrCat(FLAGS_font, "Glow"), "", 8, Color::white)),
+    team_font  (W, FontDesc("sbmaps")),
+    start_button(app->toolkit->CreateToolbar(W, "Light", MenuItemVec{
       { "start", "", bind(&TeamSelectView::Start, this) }, }, 0))
   {
     vector<CollectionItem> items;
@@ -253,12 +260,12 @@ struct TeamSelectView : public View {
       // loadSystemIcon fromGlyph: team_font->FindGlyph((*teams)[i].font_index)
       items.emplace_back((*teams)[i].name, 0, bind(&TeamSelectView::SetHomeTeamIndex, this, i));
     }
-    team_select = app->toolkit->CreateCollectionView("Select Team", "", "Clear", move(items));
+    team_select = app->toolkit->CreateCollectionView(W, "Select Team", "", "Clear", move(items));
     home_team = Rand(size_t(0), teams->size()-1);
   }
 
   void SetHomeTeamIndex(int n) { home_team = n; child_box.Clear(); }
-  void Start() { root->shell->Run("local_server"); }
+  void Start() { team_select->Show(false); root->shell->Run("local_server"); }
 
   void Draw(Shader *MyShader) {
     GraphicsContext gc(root->gd);
@@ -312,12 +319,12 @@ struct MyGameWindow : public View {
   SpaceballTeam *home_team=0, *away_team=0;
   Skybox skybox;
 
-  MyGameWindow(Window *W) : View(W), framebuffer(W->gd), ball_trail("BallTrails", true, .05, .05, 0, 0),
-  shooting_stars("ShootingStars", true, .1, .2, 0, 0), fireworks("Fireworks", true)
+  MyGameWindow(Window *W) : View(W), framebuffer(W->parent), ball_trail("BallTrails", true, .05, .05, 0, 0),
+  shooting_stars("ShootingStars", true, .1, .2, 0, 0), fireworks("Fireworks", true), skybox(W->parent)
   {
     // field
-    scene.Add(new Entity("lines", app->asset("lines")));
-    scene.Add(new Entity("field", app->asset("field"),
+    scene.Add(make_unique<Entity>("lines", app->asset("lines")));
+    scene.Add(make_unique<Entity>("field", app->asset("field"),
               Entity::DrawCB(bind(&TextureArray::DrawSequence, &my_app->caust, _1, _2, &caust_ind))));
 
     // ball trail
@@ -334,9 +341,8 @@ struct MyGameWindow : public View {
     ball_trail.radius_decay = false;
     ball_trail.texture = app->asset("particles")->tex.ID;
     ball_trail.billboard = true;
-    ball_particles = new Entity("ball_particles", app->asset("particles"),
-                                Entity::DrawCB(bind(&BallTrails::AssetDrawCB, &ball_trail, W->gd, _1, _2)));
-    scene.Add(ball_particles);
+    ball_particles = scene.Add(make_unique<Entity>("ball_particles", app->asset("particles"),
+                                                   Entity::DrawCB(bind(&BallTrails::AssetDrawCB, &ball_trail, W->gd, _1, _2))));
 
     // shooting stars
     app->asset("stars")->tex.ID = app->asset("particles")->tex.ID;
@@ -351,10 +357,11 @@ struct MyGameWindow : public View {
     shooting_stars.billboard = true;
     shooting_stars.vel = v3(0, 0, -1);
     shooting_stars.always_on = false;
-    star_particles = new Entity("star_particles", app->asset("stars"),
-                                Entity::DrawCB(bind(&ShootingStars::AssetDrawCB, &shooting_stars, W->gd, _1, _2)));
+#if 0
+    star_particles = scene.add(make_unique<Entity>("star_particles", app->asset("stars"),
+                                                   Entity::DrawCB(bind(&ShootingStars::AssetDrawCB, &shooting_stars, W->gd, _1, _2))));
     star_particles->pos = v3(0, -4, 5);
-    // scene.add(star_particles);
+#endif
 
     // fireworks
     fireworks_positions.resize(2);
@@ -362,7 +369,7 @@ struct MyGameWindow : public View {
     fireworks.pos_transform = &fireworks_positions;
     fireworks.rand_color = true;
 
-    menubar = W->AddView(make_unique<GameMenuGUI>(W, FLAGS_master.c_str(), FLAGS_default_port, &sbsettings, &app->asset("title")->tex));
+    menubar = W->AddView(make_unique<GameMenuGUI>(W, app->net.get(), app->toolkit, app->audio.get(), FLAGS_master.c_str(), FLAGS_default_port, &sbsettings, &app->asset("title")->tex));
     menubar->EnableParticles(&scene.cam, &app->asset("glow")->tex);
     // menubar->tab3_player_name.AssignInput(FLAGS_player_name);
     menubar->Activate();
@@ -376,7 +383,7 @@ struct MyGameWindow : public View {
     chat->write_last = Time(0);
 
     world = new SpaceballGame(&scene);
-    server = new SpaceballClient(world, playerlist, chat);
+    server = new SpaceballClient(app, app->net.get(), world, playerlist, chat);
     server->map_changed_cb = bind(&MyGameWindow::HandleMapChanged, this, _1, _2, _3);
 
     // init frame buffer
@@ -389,7 +396,7 @@ struct MyGameWindow : public View {
     SetInitialCameraPosition(&scene.cam);
 
     if (FLAGS_multitouch) {
-      touchcontrols = new GameMultiTouchControls(server);
+      touchcontrols = new GameMultiTouchControls(root, server);
       helper = new HelperView(root);
       point space(W->gl_w*.02, W->gl_h*.05);
       const Box &lw = touchcontrols->lpad_win, &rw = touchcontrols->rpad_win;
@@ -421,11 +428,11 @@ struct MyGameWindow : public View {
 
 #ifdef LFL_BUILTIN_SERVER
     if (!builtin_server) {
-      builtin_server = new SpaceballServer(StrCat(FLAGS_player_name, "'s server"), 20, &app->asset.vec);
+      builtin_server = new SpaceballServer(app, app->net.get(), StrCat(FLAGS_player_name, "'s server"), 20, &app->asset.vec);
       builtin_server->bots = new SpaceballBots(builtin_server->world);
       builtin_server->World()->game_finished_cb = bind(&MyGameWindow::HandleGameFinished, this, builtin_server->World());
-      builtin_server->InitTransport(local_transport_protocol, FLAGS_default_port);
-      if (local_transport_protocol == Protocol::InProcess) server->inprocess_server = builtin_server->inprocess_transport;
+      builtin_server->InitTransport(app->net.get(), local_transport_protocol, FLAGS_default_port);
+      if (local_transport_protocol == Protocol::InProcess) server->inprocess_server = builtin_server->inprocess_transport.get();
     }
 
     if (!builtin_server_enabled) {
@@ -517,7 +524,7 @@ struct MyGameWindow : public View {
     W->GetInputController<BindMap>(0)->Repeat(clicks);
 
     if (Singleton<FlagMap>::Get()->dirty) {
-      Singleton<FlagMap>::Get()->dirty = false;
+      Singleton<FlagMap>::Set()->dirty = false;
       SettingsFile::Write(save_settings, app->savedir, "settings");
     }
 
@@ -613,8 +620,8 @@ struct MyGameWindow : public View {
       goal->tex.Bind();
       gc.DrawTexturedBox(win, goal->tex.coord);
 
-      static Font *font = app->fonts->Get(FLAGS_font, "", 16);
-      font->Draw(StrCat(server->last_scored_PlayerName, " scores"),
+      static Font *font = app->fonts->Get(W->gl_h, FLAGS_font, "", 16);
+      font->Draw(gc.gd, StrCat(server->last_scored_PlayerName, " scores"),
                  Box(win.x, win.y - W->gl_h*.1, W->gl_w*.2, W->gl_h*.1, false), 
                  0, Font::DrawFlag::AlignCenter | Font::DrawFlag::NoWrap);
 
@@ -634,8 +641,8 @@ struct MyGameWindow : public View {
 
     if (server->gameover.enabled()) {
       Box win(W->gl_w*.4, W->gl_h*.9, W->gl_w*.2, W->gl_h*.1, false);
-      static Font *font = app->fonts->Get(FLAGS_font, "", 16);
-      font->Draw(StrCat(server->gameover.start_ind == SpaceballGame::Team::Home ? home_team->name : away_team->name, " wins"),
+      static Font *font = app->fonts->Get(W->gl_h, FLAGS_font, "", 16);
+      font->Draw(gc.gd, StrCat(server->gameover.start_ind == SpaceballGame::Team::Home ? home_team->name : away_team->name, " wins"),
                  win, 0, Font::DrawFlag::AlignCenter);
     }
 
@@ -671,10 +678,10 @@ struct MyGameWindow : public View {
     }
 
     gc.gd->EnableBlend();
-    static Font *text = app->fonts->Get(FLAGS_font, "", 8);
-    if (FLAGS_draw_fps)   text->Draw(StringPrintf("FPS = %.2f", root->fps.FPS()),      point(W->gl_w*.05, W->gl_h*.05));
-    if (!menubar->active) text->Draw(intervalminutes(Now() - map_started),             point(W->gl_w*.93, W->gl_h*.97));
-    if (!menubar->active) text->Draw(StrCat(home_team->name, " vs ", away_team->name), point(W->gl_w*.01, W->gl_h*.97));
+    static Font *text = app->fonts->Get(W->gl_h, FLAGS_font, "", 8);
+    if (FLAGS_draw_fps)   text->Draw(gc.gd, StringPrintf("FPS = %.2f", root->fps.FPS()),      point(W->gl_w*.05, W->gl_h*.05));
+    if (!menubar->active) text->Draw(gc.gd, intervalminutes(Now() - map_started),             point(W->gl_w*.93, W->gl_h*.97));
+    if (!menubar->active) text->Draw(gc.gd, StrCat(home_team->name, " vs ", away_team->name), point(W->gl_w*.01, W->gl_h*.97));
 
     return 0;
   }
@@ -734,11 +741,13 @@ void MyWindowInit(Window *W) {
 
 void MyWindowStart(Window *W) {
   CHECK_EQ(0, W->NewView());
+  W->shell = make_unique<Shell>(W, app, app, app, app, app, app->net.get(), app, app, app->audio.get(),
+                                app, app, app->fonts.get());
+
   MyGameWindow *game_gui = W->ReplaceView(0, make_unique<MyGameWindow>(W));
   W->frame_cb = bind(&MyGameWindow::Frame, game_gui, _1, _2, _3);
   if (FLAGS_console) W->InitConsole(Callback());
 
-  W->shell = make_unique<Shell>(W);
   W->shell->Add("server",       bind(&MyGameWindow::ServerCmd,      game_gui, _1));
   W->shell->Add("field_color",  bind(&MyGameWindow::FieldColorCmd,  game_gui, _1));
   W->shell->Add("local_server", bind(&MyGameWindow::LocalServerCmd, game_gui, _1));
@@ -796,7 +805,7 @@ void MyWindowStart(Window *W) {
 }; // namespace LFL
 using namespace LFL;
 
-extern "C" void MyAppCreate(int argc, const char* const* argv) {
+extern "C" LFApp *MyAppCreate(int argc, const char* const* argv) {
   FLAGS_far_plane = 1000;
   FLAGS_soundasset_seconds = 2;
   FLAGS_scale_font_height = 320;
@@ -805,9 +814,9 @@ extern "C" void MyAppCreate(int argc, const char* const* argv) {
   FLAGS_font_flag = FLAGS_console_font_flag = 0;
   FLAGS_enable_audio = FLAGS_enable_video = FLAGS_enable_input = FLAGS_enable_network = FLAGS_console = 1;
   FLAGS_depth_buffer_bits = 16;
-  app = CreateApplication(argc, argv);
-  my_app = new MyAppState();
-  app->focused = Window::Create();
+  app = CreateApplication(argc, argv).release();
+  my_app = new MyAppState(app);
+  app->focused = CreateWindow(app).release();
   app->name = "Spaceball";
   app->window_start_cb = MyWindowStart;
   app->window_init_cb = MyWindowInit;
@@ -822,6 +831,7 @@ extern "C" void MyAppCreate(int argc, const char* const* argv) {
   FLAGS_target_fps = app->focused->target_fps = 60;
   app->focused->SetBox(point(840, 760), Box(840, 760));
 #endif
+  return app;
 }
 
 extern "C" int MyAppMain() {
@@ -829,7 +839,7 @@ extern "C" int MyAppMain() {
   if (app->Init()) return -1;
   INFO("BUILD Version ", "1.02.1");
 
-  FontEngine *atlas_engine = app->fonts->atlas_engine.get();
+  FontEngine *atlas_engine = app->fonts->atlas_engine.get(app->fonts.get());
   atlas_engine->Init(FontDesc("MobileAtlas",              "",  0, Color::white, Color::clear, 0, false));
   atlas_engine->Init(FontDesc("dpad_atlas",               "",  0, Color::white, Color::clear, 0, false));
   atlas_engine->Init(FontDesc("sbmaps",                   "",  0, Color::white, Color::clear, 0, false));
@@ -837,7 +847,7 @@ extern "C" int MyAppMain() {
   atlas_engine->Init(FontDesc(StrCat(FLAGS_font, "Glow"), "", 32, Color::white, Color::clear, 0, false));
 
   SettingsFile::Read(app->savedir, "settings");
-  Singleton<FlagMap>::Get()->dirty = false;
+  Singleton<FlagMap>::Set()->dirty = false;
   GraphicsContext gc(app->focused->gd);
   gc.gd->default_draw_mode = DrawMode::_3D;
 
@@ -848,31 +858,31 @@ extern "C" int MyAppMain() {
 
   if (FLAGS_first_run) {
     INFO("Welcome to Spaceball 6006, New Player.");
-    Singleton<FlagMap>::Get()->Set("first_run", "0");
+    Singleton<FlagMap>::Set()->Set("first_run", "0");
   }
 
   // app->assets.Add(name,     texture,          scale,            trans, rotate, geometry      hull,                            cubemap,     texgen));
-  app->asset.Add("particles",  "particle.png",   1,                0,     0,      nullptr,      nullptr,                         0,           0);
-  app->asset.Add("stars",      "",               1,                0,     0,      nullptr,      nullptr,                         0,           0);
-  app->asset.Add("glow",       "glow.png",       1,                0,     0,      nullptr,      nullptr,                         0,           0);
-  app->asset.Add("field",      "",               1,                0,     0,      nullptr,      nullptr,                         0,           0);
-  app->asset.Add("lines",      "lines.png",      1,                0,     0,      nullptr,      nullptr,                         0,           0);
-  app->asset.Add("ball",       "",               MyBall::radius(), 1,     0,      "sphere.obj", nullptr,                         0);
-  app->asset.Add("ship",       "ship.png",       .05,              1,     0,      "ship.obj",   Cube::Create(MyShip::radius()).release(), 0, &ShipDraw);
-  app->asset.Add("shipred",    "",               0,                0,     0,      nullptr,      nullptr,                         0,           0);
-  app->asset.Add("shipblue",   "",               0,                0,     0,      nullptr,      nullptr,                         0,           0);
-  app->asset.Add("title",      "title.png",      1,                0,     0,      nullptr,      nullptr,                         0,           0);
-  app->asset.Add("goal",       "goal.png",       1,                0,     0,      nullptr,      nullptr,                         0,           0);
+  app->asset.Add(app, "particles",  "particle.png",   1,                0,     0,      nullptr,      nullptr,                         0,           0);
+  app->asset.Add(app, "stars",      "",               1,                0,     0,      nullptr,      nullptr,                         0,           0);
+  app->asset.Add(app, "glow",       "glow.png",       1,                0,     0,      nullptr,      nullptr,                         0,           0);
+  app->asset.Add(app, "field",      "",               1,                0,     0,      nullptr,      nullptr,                         0,           0);
+  app->asset.Add(app, "lines",      "lines.png",      1,                0,     0,      nullptr,      nullptr,                         0,           0);
+  app->asset.Add(app, "ball",       "",               MyBall::radius(), 1,     0,      "sphere.obj", nullptr,                         0);
+  app->asset.Add(app, "ship",       "ship.png",       .05,              1,     0,      "ship.obj",   Cube::Create(MyShip::radius()).release(), 0, &ShipDraw);
+  app->asset.Add(app, "shipred",    "",               0,                0,     0,      nullptr,      nullptr,                         0,           0);
+  app->asset.Add(app, "shipblue",   "",               0,                0,     0,      nullptr,      nullptr,                         0,           0);
+  app->asset.Add(app, "title",      "title.png",      1,                0,     0,      nullptr,      nullptr,                         0,           0);
+  app->asset.Add(app, "goal",       "goal.png",       1,                0,     0,      nullptr,      nullptr,                         0,           0);
   app->asset.Load();
   app->asset("field")->blendt = GraphicsDevice::SrcAlpha;
   Asset *lines = app->asset("lines");
   lines->geometry = FieldLines(lines->tex.coord[2], lines->tex.coord[3]);
-  Asset::LoadTextureArray("%s%02d.%s", "caust", "png", 32, &my_app->caust, VideoAssetLoader::Flag::Default | VideoAssetLoader::Flag::RepeatGL);
+  app->LoadTextureArray("%s%02d.%s", "caust", "png", 32, &my_app->caust, VideoAssetLoader::Flag::Default | VideoAssetLoader::Flag::RepeatGL);
 
   if (FLAGS_enable_audio) {
     // app->soundasset.Add(name,  filename,              ringbuf, channels, sample_rate, seconds );
-    app->soundasset.Add("music",  "dstsecondballad.ogg", nullptr, 0,        0,           0       );
-    app->soundasset.Add("bounce", "scififortyfive.wav",  nullptr, 0,        0,           0       );
+    app->soundasset.Add(app, "music",  "dstsecondballad.ogg", nullptr, 0,        0,           0       );
+    app->soundasset.Add(app, "bounce", "scififortyfive.wav",  nullptr, 0,        0,           0       );
     app->soundasset.Load();
     auto bounce = app->soundasset("bounce");
     bounce->max_distance = 1000;
@@ -880,15 +890,15 @@ extern "C" int MyAppMain() {
   }
 
   if (gc.gd->ShaderSupport()) {
-    string fader_shader  = Asset::FileContents("fader.frag");
-    string warp_shader = Asset::FileContents("warp.frag");
+    string fader_shader = app->FileContents("fader.frag");
+    string warp_shader = app->FileContents("warp.frag");
     string explode_shader = gc.gd->vertex_shader;
     CHECK(ReplaceString(&explode_shader, "// LFLPositionShaderMarker",
-                        Asset::FileContents("explode.vert")));
+                        app->FileContents("explode.vert")));
 
-    Shader::Create("fadershader",   gc.gd->vertex_shader, fader_shader,        "",                     &my_app->fadershader);
-    Shader::Create("explodeshader", explode_shader,       gc.gd->pixel_shader, ShaderDefines(0,1,1,0), &my_app->explodeshader);
-    Shader::CreateShaderToy("warpshader", warp_shader, &my_app->warpshader);
+    Shader::Create(app, "fadershader",   gc.gd->vertex_shader, fader_shader,        "",                     &my_app->fadershader);
+    Shader::Create(app, "explodeshader", explode_shader,       gc.gd->pixel_shader, ShaderDefines(0,1,1,0), &my_app->explodeshader);
+    Shader::CreateShaderToy(app, "warpshader", warp_shader, &my_app->warpshader);
   }
 
   // Color ships red and blue
@@ -913,13 +923,13 @@ extern "C" int MyAppMain() {
     ball->col = Color(1.4, 1.4, 1.4);
   }
 
-  Game::Credits *credits = Singleton<Game::Credits>::Get();
+  Game::Credits *credits = Singleton<Game::Credits>::Set();
   credits->emplace_back("Game",         "koldfuzor",    "http://www.lucidfusionlabs.com/", "");
   credits->emplace_back("Skyboxes",     "3delyvisions", "http://www.3delyvisions.com/",    "");
   credits->emplace_back("Physics",      "Box2D",        "http://box2d.org/",               "");
   credits->emplace_back("Fonts",        "Cpr.Sparhelt", "http://www.facebook.com/pages/Magique-Fonts-Koczman-B%C3%A1lint/110683665690882", "");
   credits->emplace_back("Image format", "Libpng",       "http://www.libpng.org/",          "");
 
-  if (FLAGS_enable_audio) app->PlayBackgroundMusic(app->soundasset("music"));
+  if (FLAGS_enable_audio) app->audio->PlayBackgroundMusic(app->soundasset("music"));
   return app->Main();
 }

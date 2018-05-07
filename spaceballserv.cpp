@@ -1,5 +1,5 @@
 /*
- * $Id: spaceballserv.cpp 1314 2014-10-16 04:43:45Z justin $
+ * $Id$
  * Copyright (C) 2009 Lucid Fusion Labs
 
  * This program is free software: you can redistribute it and/or modify
@@ -20,8 +20,14 @@
 #include "core/app/gl/view.h"
 #include "core/app/gl/toolkit.h"
 #include "core/app/ipc.h"
+#include "core/app/shell.h"
 #include "core/web/browser.h"
 #include "core/game/game.h"
+
+namespace LFL {
+Application *app;
+};
+
 #include "spaceballserv.h"
 
 namespace LFL {
@@ -58,13 +64,13 @@ int SpaceballServer(int argc, const char* const* argv) {
   app->focused->frame_cb = Frame;
 
   // assets.push_back(Asset(name,      texture, scale, trans, rotate, geometry  hull, cubemap, texgen));
-  assets.push_back(Asset("ship",       "",      0,     0,     0,      0,        0,    0,       0     ));
-  assets.push_back(Asset("shipred",    "",      0,     0,     0,      0,        0,    0,       0     ));
-  assets.push_back(Asset("shipblue",   "",      0,     0,     0,      0,        0,    0,       0     ));
-  assets.push_back(Asset("ball",       "",      0,     0,     0,      0,        0,    0,       0     ));
+  assets.push_back(Asset(app, "ship",       "",      0,     0,     0,      0,        0,    0,       0     ));
+  assets.push_back(Asset(app, "shipred",    "",      0,     0,     0,      0,        0,    0,       0     ));
+  assets.push_back(Asset(app, "shipblue",   "",      0,     0,     0,      0,        0,    0,       0     ));
+  assets.push_back(Asset(app, "ball",       "",      0,     0,     0,      0,        0,    0,       0     ));
   Asset::Load(&assets);
 
-  HTTPServer httpd(FLAGS_port, false);
+  HTTPServer httpd(app->net.get(), FLAGS_port, false);
   if (app->net->Enable(&httpd)) return -1;
   httpd.AddURL("/favicon.ico", new HTTPServer::FileResource("./assets/icon.ico", "image/x-icon"));
   httpd.AddURL("/", new SpaceballStatusServer());
@@ -72,7 +78,7 @@ int SpaceballServer(int argc, const char* const* argv) {
   // server = new SpaceballServer(FLAGS_name, FLAGS_port, FLAGS_framerate, &assets);
   if (!FLAGS_rconpw.empty()) server->rcon_auth_passwd = FLAGS_rconpw;
   if (!FLAGS_master.empty()) server->master_sink_url = FLAGS_master;
-  if (app->net->Enable(server->udp_transport)) return -1;
+  if (app->net->Enable(server->udp_transport.get())) return -1;
 
   INFO("Spaceball 6006 server initialized");
   return app->Main();
@@ -81,10 +87,11 @@ int SpaceballServer(int argc, const char* const* argv) {
 }; // namespace LFL;
 using namespace LFL;
 
-extern "C" void MyAppCreate(int argc, const char* const* argv) {
-  app = new Application(argc, argv);
-  app->focused = Window::Create();
+extern "C" LFApp *MyAppCreate(int argc, const char* const* argv) {
+  app = CreateApplication(argc, argv).release();
+  app->focused = CreateWindow(app).release();
   app->name = "spaceballserv";
+  return app;
 }
 
 extern "C" int MyAppMain() {
