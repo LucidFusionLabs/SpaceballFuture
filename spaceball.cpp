@@ -24,17 +24,24 @@
 #include "core/game/game.h"
 
 namespace LFL {
-Application *app=0;
-};
-
-#include "spaceballserv.h"
-
-namespace LFL {
 DEFINE_bool  (draw_fps,      true,                                  "Draw FPS");
 DEFINE_int   (default_port,  27640,                                 "Default port");
 DEFINE_string(master,        "lucidfusionlabs.com:27994/spaceball", "Master server list");
 DEFINE_string(player_name,   "",                                    "Player name");
 DEFINE_bool  (first_run,     true,                                  "First run of program");
+
+struct MyApp : public Application {
+  using Application::Application;
+  TextureArray caust;
+  Shader fadershader, warpshader, explodeshader;
+  MyApp(int ac, const char* const* av) : Application(ac, av), fadershader(this), warpshader(this), explodeshader(this) {}
+  void OnWindowInit(Window *W);
+  void OnWindowStart(Window *W);
+} *app;
+
+}; // namespace LFL
+#include "spaceballserv.h"
+namespace LFL {
 
 typedef Particles<256, 1, true> BallTrails;
 typedef Particles<256, 1, true> ShootingStars;
@@ -42,12 +49,6 @@ typedef Particles<1024, 1, true> Fireworks;
 typedef Particles<16, 1, true> Thrusters;
 typedef SpaceballGame::Ship MyShip;
 typedef SpaceballGame::Ball MyBall;
-
-struct MyAppState {
-  TextureArray caust;
-  Shader fadershader, warpshader, explodeshader;
-  MyAppState(GraphicsDeviceHolder *p) : fadershader(p), warpshader(p), explodeshader(p) {}
-} *my_app;
 
 Geometry *FieldGeometry(const Color &rg, const Color &bg, const Color &fc) {
   vector<v3> verts, norm;
@@ -196,7 +197,7 @@ struct SpaceballClient : public GameClient {
   void AnimationChange(Entity *e, int NewID, int NewSeq) {
     static SoundAsset *bounce = app->soundasset("bounce");
     if      (NewID == SpaceballGame::AnimShipBoost) { if (FLAGS_enable_audio) app->audio->PlaySoundEffect(bounce, e->pos, e->vel); }
-    else if (NewID == SpaceballGame::AnimExplode)   e->animation.Start(&my_app->explodeshader);
+    else if (NewID == SpaceballGame::AnimExplode)   e->animation.Start(&app->explodeshader);
   }
 
   void RconRequestCB(const string &cmd, const string &arg, int seq) { 
@@ -325,7 +326,7 @@ struct MyGameWindow : public View {
     // field
     scene.Add(make_unique<Entity>("lines", app->asset("lines")));
     scene.Add(make_unique<Entity>("field", app->asset("field"),
-              Entity::DrawCB(bind(&TextureArray::DrawSequence, &my_app->caust, _1, _2, &caust_ind))));
+              Entity::DrawCB(bind(&TextureArray::DrawSequence, &app->caust, _1, _2, &caust_ind))));
 
     // ball trail
     ball_trail.emitter_type = BallTrails::Emitter::Sprinkler | BallTrails::Emitter::RainbowFade;
@@ -547,7 +548,7 @@ struct MyGameWindow : public View {
       map_transition -= clicks;
       gc.gd->DrawMode(DrawMode::_2D);
       FLAGS_shadertoy_blend = 1 - float(map_transition) / map_transition_start;
-      glShadertoyShaderWindows(gc.gd, &my_app->warpshader, Color::grey60, W->Box(), &framebuffer.tex);
+      glShadertoyShaderWindows(gc.gd, &app->warpshader, Color::grey60, W->Box(), &framebuffer.tex);
       return 0;
 
     } else {
@@ -652,10 +653,10 @@ struct MyGameWindow : public View {
       scene.cam.up  = v3(0, 1, 0);
     }
 
-    if (team_select->active) team_select->Draw(my_app->fadershader.ID > 0 ? &my_app->fadershader : 0);
+    if (team_select->active) team_select->Draw(app->fadershader.ID > 0 ? &app->fadershader : 0);
 
     // Press escape for menubar
-    else if (menubar->active) menubar->Draw(clicks, my_app->fadershader.ID > 0 ? &my_app->fadershader : 0);
+    else if (menubar->active) menubar->Draw(clicks, app->fadershader.ID > 0 ? &app->fadershader : 0);
 
     // Press 't' to talk
     else if (chat->Active()) {}
@@ -663,7 +664,7 @@ struct MyGameWindow : public View {
     // Press tab for playerlist
     else if (playerlist->active || server->gameover.enabled()) {
       server->control.SetPlayerList();
-      playerlist->Draw(my_app->fadershader.ID > 0 ? &my_app->fadershader : 0);
+      playerlist->Draw(app->fadershader.ID > 0 ? &app->fadershader : 0);
     }
 
     // Press tick for console
@@ -734,12 +735,12 @@ struct MyGameWindow : public View {
   }
 };
 
-void MyWindowInit(Window *W) {
+void MyApp::OnWindowInit(Window *W) {
   W->caption = "Spaceball 6006";
   W->multitouch_keyboard_x = .37;
 }
 
-void MyWindowStart(Window *W) {
+void MyApp::OnWindowStart(Window *W) {
   CHECK_EQ(0, W->NewView());
   W->shell = make_unique<Shell>(W, app, app, app, app, app, app->net.get(), app, app, app->audio.get(),
                                 app, app, app->fonts.get());
@@ -814,14 +815,12 @@ extern "C" LFApp *MyAppCreate(int argc, const char* const* argv) {
   FLAGS_font_flag = FLAGS_console_font_flag = 0;
   FLAGS_enable_audio = FLAGS_enable_video = FLAGS_enable_input = FLAGS_enable_network = FLAGS_console = 1;
   FLAGS_depth_buffer_bits = 16;
-  app = CreateApplication(argc, argv).release();
-  my_app = new MyAppState(app);
+  app = make_unique<MyApp>(argc, argv).release();
   app->focused = CreateWindow(app).release();
   app->name = "Spaceball";
-  app->window_start_cb = MyWindowStart;
-  app->window_init_cb = MyWindowInit;
+  app->window_start_cb = bind(&MyApp::OnWindowStart, app, _1);
+  app->window_init_cb = bind(&MyApp::OnWindowInit, app, _1);
   app->window_init_cb(app->focused);
-  // app->exit_cb = []{ delete my_app; };
 #ifdef LFL_MOBILE
   app->SetExtraScale(true);
   app->SetTitleBar(false);
@@ -877,7 +876,7 @@ extern "C" int MyAppMain() {
   app->asset("field")->blendt = GraphicsDevice::SrcAlpha;
   Asset *lines = app->asset("lines");
   lines->geometry = FieldLines(lines->tex.coord[2], lines->tex.coord[3]);
-  app->LoadTextureArray("%s%02d.%s", "caust", "png", 32, &my_app->caust, VideoAssetLoader::Flag::Default | VideoAssetLoader::Flag::RepeatGL);
+  app->LoadTextureArray("%s%02d.%s", "caust", "png", 32, &app->caust, VideoAssetLoader::Flag::Default | VideoAssetLoader::Flag::RepeatGL);
 
   if (FLAGS_enable_audio) {
     // app->soundasset.Add(name,  filename,              ringbuf, channels, sample_rate, seconds );
@@ -896,9 +895,9 @@ extern "C" int MyAppMain() {
     CHECK(ReplaceString(&explode_shader, "// LFLPositionShaderMarker",
                         app->FileContents("explode.vert")));
 
-    Shader::Create(app, "fadershader",   gc.gd->vertex_shader, fader_shader,        "",                     &my_app->fadershader);
-    Shader::Create(app, "explodeshader", explode_shader,       gc.gd->pixel_shader, ShaderDefines(0,1,1,0), &my_app->explodeshader);
-    Shader::CreateShaderToy(app, "warpshader", warp_shader, &my_app->warpshader);
+    Shader::Create(app, "fadershader",   gc.gd->vertex_shader, fader_shader,        "",                     &app->fadershader);
+    Shader::Create(app, "explodeshader", explode_shader,       gc.gd->pixel_shader, ShaderDefines(0,1,1,0), &app->explodeshader);
+    Shader::CreateShaderToy(app, "warpshader", warp_shader, &app->warpshader);
   }
 
   // Color ships red and blue
