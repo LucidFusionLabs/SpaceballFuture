@@ -21,7 +21,7 @@
 #include "core/app/gl/toolkit.h"
 #include "core/app/ipc.h"
 #include "core/app/shell.h"
-#include "core/web/browser.h"
+#include "core/web/browser/browser.h"
 #include "core/game/game.h"
 
 namespace LFL {
@@ -89,12 +89,12 @@ using namespace LFL;
 
 extern "C" LFApp *MyAppCreate(int argc, const char* const* argv) {
   app = make_unique<Application>(argc, argv).release();
-  app->focused = CreateWindow(app).release();
+  app->focused = app->framework->ConstructWindow(app).release();
   app->name = "spaceballserv";
   return app;
 }
 
-extern "C" int MyAppMain() {
+extern "C" int MyAppMain(LFApp*) {
 #ifdef LFL_WINDOWS
   if (argc>1) FLAGS_open_console = 1;
 #endif

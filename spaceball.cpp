@@ -20,7 +20,7 @@
 #include "core/app/gl/toolkit.h"
 #include "core/app/network.h"
 #include "core/app/shell.h"
-#include "core/web/browser.h"
+#include "core/web/browser/browser.h"
 #include "core/game/game.h"
 
 namespace LFL {
@@ -87,7 +87,7 @@ Geometry *FieldGeometry(const Color &rg, const Color &bg, const Color &fc) {
   PushBack(&verts, &norm, &tex, &col, fd->H * goals, fwd, v2(tx, ty), bg.a(10 + ci++ * 6.0/255));
   PushBack(&verts, &norm, &tex, &col, fd->E * goals, fwd, v2(0,  ty), bg.a(10 + ci++ * 6.0/255));
 
-  return new Geometry(GraphicsDevice::Triangles, verts.size(), &verts[0], 0, &tex[0], &col[0]);
+  return new Geometry(Geometry::Primitive::Triangles, verts.size(), &verts[0], 0, &tex[0], &col[0]);
 }
 
 Geometry *FieldLines(float tx, float ty) {
@@ -99,7 +99,7 @@ Geometry *FieldLines(float tx, float ty) {
   PushBack(&verts, &tex, fd->B, v2(0,  0));
   PushBack(&verts, &tex, fd->G, v2(tx, ty));
   PushBack(&verts, &tex, fd->F, v2(0,  ty));
-  return new Geometry(GraphicsDevice::Triangles, verts.size(), &verts[0], 0, &tex[0], NullPointer<Color>());
+  return new Geometry(Geometry::Primitive::Triangles, verts.size(), &verts[0], 0, &tex[0], NullPointer<Color>());
 }
 
 void ShipDraw(GraphicsDevice *gd, Asset *a, Entity *e) {
@@ -131,7 +131,7 @@ void ShipDraw(GraphicsDevice *gd, Asset *a, Entity *e) {
     lightning_obj = Geometry::LoadOBJ(unique_ptr<File>(app->OpenFile("ship_lightning.obj")).get(),
                                       lightning_glyph_texcoord);
   }
-  gd->BindTexture(GraphicsDevice::Texture2D, lightning_glyph->tex.ID);
+  gd->BindTexture(gd->c.Texture2D, lightning_glyph->tex.ID);
 
   float lightning_offset = (e->namehash % 11) / 10.0;
   lightning_obj->ScrollTexCoord(gd, -.4 * ToFSeconds(lightning_timer.GetTime(true)).count(),
@@ -516,9 +516,9 @@ struct MyGameWindow : public View {
     field->geometry = FieldGeometry(home_goal_color, away_goal_color, home_team->field_color);
 
     root->gd->EnableLight(0);
-    root->gd->Light(0, GraphicsDevice::Ambient,  home_team->light.color.ambient.x);
-    root->gd->Light(0, GraphicsDevice::Diffuse,  home_team->light.color.diffuse.x);
-    root->gd->Light(0, GraphicsDevice::Specular, home_team->light.color.specular.x);
+    root->gd->Light(0, root->gd->c.Ambient,  home_team->light.color.ambient.x);
+    root->gd->Light(0, root->gd->c.Diffuse,  home_team->light.color.diffuse.x);
+    root->gd->Light(0, root->gd->c.Specular, home_team->light.color.specular.x);
   }
 
   int Frame(Window *W, unsigned clicks, int flag) {
@@ -560,7 +560,7 @@ struct MyGameWindow : public View {
       Scene::EntityVector deleted;
       Scene::LastUpdatedFilter scene_filter_deleted(0, server->last.time_frame, &deleted);
 
-      gc.gd->Light(0, GraphicsDevice::Position, &home_team->light.pos.x);
+      gc.gd->Light(0, gc.gd->c.Position, &home_team->light.pos.x);
       skybox.Draw(gc.gd);
       if (draw_skybox_only) return 0;
 
@@ -742,8 +742,7 @@ void MyApp::OnWindowInit(Window *W) {
 
 void MyApp::OnWindowStart(Window *W) {
   CHECK_EQ(0, W->NewView());
-  W->shell = make_unique<Shell>(W, app, app, app, app, app, app->net.get(), app, app, app->audio.get(),
-                                app, app, app->fonts.get());
+  W->shell = make_unique<Shell>(W);
 
   MyGameWindow *game_gui = W->ReplaceView(0, make_unique<MyGameWindow>(W));
   W->frame_cb = bind(&MyGameWindow::Frame, game_gui, _1, _2, _3);
@@ -816,7 +815,7 @@ extern "C" LFApp *MyAppCreate(int argc, const char* const* argv) {
   FLAGS_enable_audio = FLAGS_enable_video = FLAGS_enable_input = FLAGS_enable_network = FLAGS_console = 1;
   FLAGS_depth_buffer_bits = 16;
   app = make_unique<MyApp>(argc, argv).release();
-  app->focused = CreateWindow(app).release();
+  app->focused = app->framework->ConstructWindow(app).release();
   app->name = "Spaceball";
   app->window_start_cb = bind(&MyApp::OnWindowStart, app, _1);
   app->window_init_cb = bind(&MyApp::OnWindowInit, app, _1);
@@ -833,7 +832,7 @@ extern "C" LFApp *MyAppCreate(int argc, const char* const* argv) {
   return app;
 }
 
-extern "C" int MyAppMain() {
+extern "C" int MyAppMain(LFApp*) {
   if (app->Create(__FILE__)) return -1;
   if (app->Init()) return -1;
   INFO("BUILD Version ", "1.02.1");
@@ -845,7 +844,7 @@ extern "C" int MyAppMain() {
   atlas_engine->Init(FontDesc("lightning",                "",  0, Color::white, Color::clear, 0, false));
   atlas_engine->Init(FontDesc(StrCat(FLAGS_font, "Glow"), "", 32, Color::white, Color::clear, 0, false));
 
-  SettingsFile::Read(app->savedir, "settings");
+  SettingsFile::Read(&app->localfs, app->savedir, "settings");
   Singleton<FlagMap>::Set()->dirty = false;
   GraphicsContext gc(app->focused->gd);
   gc.gd->default_draw_mode = DrawMode::_3D;
@@ -873,7 +872,7 @@ extern "C" int MyAppMain() {
   app->asset.Add(app, "title",      "title.png",      1,                0,     0,      nullptr,      nullptr,                         0,           0);
   app->asset.Add(app, "goal",       "goal.png",       1,                0,     0,      nullptr,      nullptr,                         0,           0);
   app->asset.Load();
-  app->asset("field")->blendt = GraphicsDevice::SrcAlpha;
+  app->asset("field")->blendt = gc.gd->c.SrcAlpha;
   Asset *lines = app->asset("lines");
   lines->geometry = FieldLines(lines->tex.coord[2], lines->tex.coord[3]);
   app->LoadTextureArray("%s%02d.%s", "caust", "png", 32, &app->caust, VideoAssetLoader::Flag::Default | VideoAssetLoader::Flag::RepeatGL);
