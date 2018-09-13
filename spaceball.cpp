@@ -244,8 +244,8 @@ struct SpaceballClient : public GameClient {
 struct TeamSelectView : public View {
   vector<SpaceballTeam> *teams;
   FontRef font, bright_font, glow_font, team_font;
-  unique_ptr<ToolbarViewInterface> start_button;
   unique_ptr<CollectionViewInterface> team_select;
+  unique_ptr<ToolbarViewInterface> start_button;
   int home_team=0, away_team=0;
 
   TeamSelectView(Window *W) : View(W), teams(SpaceballTeam::GetList()),
@@ -258,28 +258,33 @@ struct TeamSelectView : public View {
   {
     vector<CollectionItem> items;
     for (int i=0, l=teams->size(); i != l; ++i) {
-      // loadSystemIcon fromGlyph: team_font->FindGlyph((*teams)[i].font_index)
-      items.emplace_back((*teams)[i].name, 0, bind(&TeamSelectView::SetHomeTeamIndex, this, i));
+      int icon = app->toolkit->LoadTexture(team_font->FindGlyph((*teams)[i].font_index)->tex);
+      items.emplace_back((*teams)[i].name, icon, [=](){ team_select->SelectRow(0, i); });
     }
     team_select = app->toolkit->CreateCollectionView(W, "Select Team", "", "Clear", move(items));
-    home_team = Rand(size_t(0), teams->size()-1);
+    team_select->SetToolbar(start_button.get());
+    team_select->SelectRow(0, Rand(size_t(0), teams->size()-1));
   }
 
-  void SetHomeTeamIndex(int n) { home_team = n; child_box.Clear(); }
-  void Start() { team_select->Show(false); root->shell->Run("local_server"); }
+  void Start() {
+    home_team = team_select->GetSelectedRow().second;
+    team_select->Show(false);
+    root->shell->Run("local_server");
+  }
 
   void Draw(Shader *MyShader) {
+    point p = root->Box().TopLeft();
     GraphicsContext gc(root->gd);
-    glShadertoyShaderWindows(gc.gd, MyShader, Color(25, 60, 130, 120), box);
-    View::Draw();
+    glShadertoyShaderWindows(gc.gd, MyShader, Color(25, 60, 130, 120), box + p);
+    View::Draw(p);
   }
 
-  void Layout() {
-    box = root->Box(.1, .1, .8, .8);
-    int bw=box.w*2/13.0, bh=bw, sx=bw/2, px=(box.w - (bw*4 + sx*3))/2;
+  View *Layout(Flow *flow_in=nullptr) override {
+    box = root->ViewBox().Scale(.1, .1, .8, .8);
     Flow flow(&box, font, ResetView());
-    if (auto v = team_select->AppendFlow(&flow)) child_view.push_back(v);
+    if (auto v = team_select->Layout(&flow)) child_view.push_back(v);
     flow.Complete();
+    return this;
   }
 };
 
@@ -656,7 +661,7 @@ struct MyGameWindow : public View {
     if (team_select->active) team_select->Draw(app->fadershader.ID > 0 ? &app->fadershader : 0);
 
     // Press escape for menubar
-    else if (menubar->active) menubar->Draw(clicks, app->fadershader.ID > 0 ? &app->fadershader : 0);
+    else if (menubar->active) menubar->Draw(W->Box().TopLeft(), clicks, app->fadershader.ID > 0 ? &app->fadershader : 0);
 
     // Press 't' to talk
     else if (chat->Active()) {}
@@ -675,7 +680,7 @@ struct MyGameWindow : public View {
     if (helper && helper->active) {
       gc.gd->SetColor(helper->font->fg);
       BoxOutline().Draw(&gc, menubar->topbar.box);
-      helper->Draw();
+      helper->Draw(point());
     }
 
     gc.gd->EnableBlend();
@@ -817,6 +822,7 @@ extern "C" LFApp *MyAppCreate(int argc, const char* const* argv) {
   app = make_unique<MyApp>(argc, argv).release();
   app->focused = app->framework->ConstructWindow(app).release();
   app->name = "Spaceball";
+  app->exit_cb = [=](){ app->soundasset.vec.clear(); };
   app->window_start_cb = bind(&MyApp::OnWindowStart, app, _1);
   app->window_init_cb = bind(&MyApp::OnWindowInit, app, _1);
   app->window_init_cb(app->focused);
